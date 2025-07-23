@@ -1,0 +1,10 @@
+LOCAL_DIR := $(GET_LOCAL_DIR)
+
+MODULE := $(LOCAL_DIR)
+
+GLOBAL_DEFINES += \
+	WITH_PL180=1
+
+MODULE_SRCS += $(LOCAL_DIR)/pl180.c
+
+include make/module.mk

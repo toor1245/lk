@@ -11,6 +11,7 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/class/uart_api.c \
 	$(LOCAL_DIR)/class/fb_api.c \
 	$(LOCAL_DIR)/class/netif_api.c \
+	$(LOCAL_DIR)/class/mmc_api.c \
 
 MODULE_OPTIONS := extra_warnings
 

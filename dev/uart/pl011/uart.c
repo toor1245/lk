@@ -15,6 +15,8 @@
 #include <kernel/thread.h>
 #include <platform/interrupts.h>
 
+#define LOCAL_TRACE 1
+
 // PL011 UART driver
 
 // PL011 registers
@@ -123,6 +125,8 @@ void pl011_init(int port) {
 
     // create circular buffer to hold received data
     cbuf_initialize(&uart[port].uart_rx_buf, RXBUF_SIZE);
+
+    LTRACEF("uart irq: %d\n", uart[port].config.irq);
 
     // assumes interrupts are contiguous
     register_int_handler(uart[port].config.irq, &uart_irq, (void *)&uart[port]);
