@@ -12,4 +12,3 @@
 struct pl180_config {
     uintptr_t base;
 };
-

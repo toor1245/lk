@@ -34,7 +34,3 @@ struct mmc_cid {
     uint16_t mdt_y;	/* Manufacturing date year (8 bits + offset from 2000) */
     uint8_t crc;
 };
-
-struct mmc_config {
-    uintptr_t base;
-};

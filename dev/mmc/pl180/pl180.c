@@ -20,7 +20,7 @@
 
 #include <platform/time.h>
 
-#include "mci_regs.h"
+#include "mci.h"
 
 #define LOCAL_TRACE 1 
 
@@ -33,8 +33,6 @@ static inline void delay(lk_time_t delay) {
 static void trace_cmd_resp(struct mmc_cmd *cmd) {
     /* Print MCI RESP0 for R48 otherwise print all RESP MCI registers (R138) */
     uint32_t count = cmd->resp_type == MMC_RESP_R48 ? 1 : 4;
-
-    LTRACEF("cmd index: %d\n", cmd->idx);
 
     for (uint32_t i = 0; i < count; i++) {
         LTRACEF("resp[%d]: 0x%x\n", i, cmd->resp[i]);
@@ -63,17 +61,19 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
     uint32_t host_status = 0;
     bool has_resp = (cmd->resp_type == MMC_RESP_R48) || (cmd->resp_type == MMC_RESP_R138);
 
-    LTRACEF("cmd arg: 0x%x\n", cmd->arg); 
+    LTRACEF("cmd idx: 0x%x\n", cmd->idx); 
+    LTRACEF("cmd arg: 0x%x\n", cmd->arg);
+
     write_mci_reg(base, MCI_ARG, cmd->arg);
     delay(300);
 
     mci_cmd = (cmd->idx & 0xFF) | (1 << 10);
     if (cmd->resp_type == MMC_RESP_R48) {
-        LTRACEF("cmd resp width: R48");
+        LTRACEF("cmd resp width: R48\n");
         mci_cmd |= (1 << 6);
     }
     if (cmd->resp_type == MMC_RESP_R138) {
-        LTRACEF("cmd resp width: R138");
+        LTRACEF("cmd resp width: R138\n");
         mci_cmd |= (1 << 6) | (1 << 7);
     }
 

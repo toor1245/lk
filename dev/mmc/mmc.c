@@ -136,4 +136,3 @@ static void mmc_init(uint level) {
 }
 
 LK_INIT_HOOK(mmc, &mmc_init, LK_INIT_LEVEL_PLATFORM);
-
