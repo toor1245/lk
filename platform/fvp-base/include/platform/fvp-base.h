@@ -19,6 +19,7 @@
 #define PERIPHERAL_BASE_VIRT (0xffffffff80000000ULL) // -2GB
 
 /* individual peripherals in this mapping */
+#define MCI_BASE (PERIPHERAL_BASE_VIRT + 0x001c050000)
 #define UART_BASE (PERIPHERAL_BASE_VIRT + 0x001c090000)
 
 /* interrupts */

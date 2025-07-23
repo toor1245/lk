@@ -9,21 +9,24 @@
 
 #include <arch.h>
 #include <lk/err.h>
+#include <lk/init.h>
 #include <lk/debug.h>
 #include <lk/trace.h>
 #include <platform.h>
 #include <platform/gic.h>
 #include <platform/interrupts.h>
+#include <dev/driver.h>
 #include <dev/interrupt/arm_gic.h>
 #include <dev/timer/arm_generic.h>
 #include <dev/power/psci.h>
 #include <dev/uart/pl011.h>
+#include <dev/mmc/pl180.h>
 #include <lk/init.h>
 #include <lib/fdtwalk.h>
 #include <kernel/vm.h>
 #include <kernel/spinlock.h>
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 struct mmu_initial_mapping mmu_initial_mappings[] = {
     {
@@ -79,3 +82,9 @@ void platform_halt(platform_halt_action suggested_action, platform_halt_reason r
     // Use the default halt implementation using psci as the reset and shutdown implementation.
     platform_halt_default(suggested_action, reason, &psci_system_reset, &psci_system_off);
 }
+
+static const struct pl180_config config = {
+    .base = MCI_BASE,
+};
+
+DEVICE_INSTANCE(mmc, mmc, &config, 0);

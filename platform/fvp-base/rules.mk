@@ -20,6 +20,7 @@ MODULE_DEPS += \
     dev/power/psci \
     dev/interrupt/arm_gic \
     dev/timer/arm_generic \
+    dev/mmc/pl180 \
     dev/uart/pl011 \
     lib/fdtwalk \
 
