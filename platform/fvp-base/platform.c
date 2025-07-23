@@ -76,14 +76,6 @@ void platform_early_init(void) {
 
 void platform_init(void) {
     pl011_init(0);
-
-/*
-    struct pl180_config mmc_config = {
-        .base = MCI_BASE,
-    };
-
-    pl180_init(&mmc_config);
-*/
 }
 
 void platform_halt(platform_halt_action suggested_action, platform_halt_reason reason) {
@@ -95,4 +87,4 @@ static const struct pl180_config config = {
     .base = MCI_BASE,
 };
 
-DEVICE_INSTANCE(mmc, mmc0, &config, 0);
+DEVICE_INSTANCE(mmc, pl180, &config, 0);

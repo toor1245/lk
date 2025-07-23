@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <lk/reg.h>
+
 /* PL180 MCI registers */
 enum pl180_regs {
     MCI_PWR     = 0x000,
@@ -59,3 +61,11 @@ enum pl180_regs {
 #define MCI_CLR_DATA_TIMEOUT  (1 << 3)
 #define MCI_CLR_CMD_RESP_END  (1 << 6)
 #define MCI_CLR_CMD_SENT      (1 << 7)
+
+static inline void write_mci_reg(uintptr_t base, size_t offset, uint32_t val) {
+    mmio_write32((uint32_t *)(base + offset), val);
+}
+
+static inline uint32_t read_mci_reg(uintptr_t base, size_t offset) {
+    return mmio_read32((uint32_t *)(base + offset));
+}

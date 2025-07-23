@@ -66,9 +66,7 @@ static void mmc_init(uint level) {
     struct device *dev = NULL;
     struct mmc_cmd cmd = { 0 };
     struct mmc_cid cid = { 0 };
-
-    LTRACEF("mmc_init started!!!");
-
+ 
 #if WITH_PL180
     dev = device_get_by_name(mmc, pl180);
 #endif
