@@ -47,6 +47,11 @@ struct device_class {
     const char *name;
 };
 
+struct device_list_entry {
+    struct list_node node;
+    struct device *dev;
+};
+
 /* standard driver ops; extensions should contain this ops structure */
 struct driver_ops {
     const struct device_class *device_class;
@@ -113,6 +118,9 @@ status_t device_fini(struct device *dev);
 
 status_t device_suspend(struct device *dev);
 status_t device_resume(struct device *dev);
+
+status_t device_get_list_type(const char *type, struct list_node *out_list);
+void device_list_destroy(struct list_node *list);
 
 __END_CDECLS
 

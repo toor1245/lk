@@ -10,6 +10,9 @@
 #include <assert.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <lk/list.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* static list of devices constructed with DEVICE_INSTANCE macros */
 extern struct device __start_devices __WEAK;
@@ -115,3 +118,37 @@ status_t device_resume(struct device *dev) {
         return ERR_NOT_SUPPORTED;
 }
 
+status_t device_get_list_type(const char *type, struct list_node *out_list) {
+    struct device_list_entry *entry;
+
+    if (!type || !out_list) {
+        return ERR_INVALID_ARGS;
+    }
+
+     for (struct device *dev = &__start_devices; dev != &__stop_devices; dev++) {
+        if (strcmp(dev->driver->type, type) != 0)
+            continue;
+
+        entry = malloc(sizeof(struct device_list_entry));
+        if (!entry) {
+            device_list_destroy(out_list);
+            return ERR_NO_MEMORY;
+        }
+
+        entry->dev = dev;
+        list_add_tail(out_list, &entry->node);
+    }
+
+    return NO_ERROR;
+}
+
+void device_list_destroy(struct list_node *list) {
+    struct device_list_entry *entry;
+    struct list_node *node, *tmp;
+
+    list_for_every_safe(list, node, tmp) {
+        entry = containerof(node, struct device_list_entry, node);
+        list_delete(&entry->node);
+        free(entry);
+    }
+}

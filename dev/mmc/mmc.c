@@ -8,7 +8,9 @@
 
 #include <stdint.h>
 #include <lk/init.h>
+#include <lk/list.h>
 #include <lk/trace.h>
+#include <dev/driver.h>
 #include <dev/mmc.h>
 #include <dev/class/mmc.h>
 
@@ -20,6 +22,8 @@
 #define OCR_VOLTAGE_MASK	(0x00FFFF80)
 #define OCR_ACCESS_MODE_MASK	(0x60000000)
 #define OCR_BUSY_MASK		(0x80000000)
+
+static struct list_node mmc_devices;
 
 static void parse_cid(uint32_t resp[4], struct mmc_cid *cid) {
     cid->mid = (resp[0] >> 24) & 0xFF;
@@ -60,20 +64,28 @@ void trace_cid(const struct mmc_cid *cid) {
     LTRACEF("CRC7 Checksum: 0x%02X\n", cid->crc);
 }
 
-
 static void mmc_init(uint level) {
     status_t err;
     struct device *dev = NULL;
+    struct device_list_entry *entry;
     struct mmc_cmd cmd = { 0 };
     struct mmc_cid cid = { 0 };
- 
-#if WITH_PL180
-    dev = device_get_by_name(mmc, pl180);
-#endif
 
-    if (dev == NULL) {
+    list_initialize(&mmc_devices);
+
+    err = device_get_list_type("mmc", &mmc_devices);
+    if (err < 0) {
+        LTRACEF("Failed to get list of MMC devices, reason: %d\n", err);
         return;
     }
+
+    if (list_length(&mmc_devices) > 1) {
+        LTRACEF("Failed to init mmc devices, mmc driver supports only one MMC/SD card\n");
+        return;
+    }
+
+    entry = list_peek_head_type(&mmc_devices, struct device_list_entry, node);
+    dev = entry->dev;
 
     err = device_init(dev);
     if (err < 0)
