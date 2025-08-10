@@ -21,7 +21,6 @@ MODULE_DEPS += \
     dev/interrupt/arm_gic \
     dev/timer/arm_generic \
     dev/mmc/pl180 \
-    dev/mmc \
     dev/uart/pl011 \
     lib/fdtwalk \
 

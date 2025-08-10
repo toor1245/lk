@@ -17,6 +17,7 @@
 
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <lk/pow2.h>
 
 #include <platform/time.h>
 
@@ -108,11 +109,61 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
     return NO_ERROR;   
 }
 
+static status_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
+    uint32_t status, status_err, reg;
+    uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT | MCI_STAT_RX_OVERRUN;
+    char *tmp = dst;
+
+    while (xfercount >= sizeof(uint32_t)) {
+        status = read_mci_reg(base, MCI_STAT);
+        status_err = status & status_err_mask;
+        if (status_err)
+            return ERR_IO;
+
+        if (status & MCI_STAT_RX_DATA_AVLBL) {
+            reg = read_mci_reg(base, MCI_DFIFO);
+            memcpy(tmp, &reg, sizeof(uint32_t));
+            tmp += sizeof(uint32_t);
+            xfercount -= sizeof(uint32_t);
+        }
+    }
+
+    return NO_ERROR;
+}
+
+static status_t pl180_read(struct device *dev, struct mmc_read_info *info) {
+    const struct pl180_config *config = dev->config;
+    uint64_t xfercount = info->blkcount * info->blksize;
+    uint32_t shift;
+    uint32_t dctrl_reg;
+    status_t res = NO_ERROR;
+    struct mmc_cmd cmd = { 0 };
+
+    shift = log2_uint(info->blksize);
+    dctrl_reg = (1 << 0) | (1 << 1); // ENABLE + Read
+    dctrl_reg |= (shift << 4);
+    write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
+
+    cmd = (struct mmc_cmd){
+	.idx = MMC_CMD_READ_SINGLE_BLK,
+	.resp_type = MMC_RESP_R48,
+	.arg = 0,
+    };
+    res = class_mmc_send_cmd(dev, &cmd);
+    if (res < 0) {
+	LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, res);
+        return res;
+    }
+
+    return pl180_read_fifo(config->base, info->dst, xfercount);
+}
+
 static struct mmc_ops pl180_ops = {
     .std = {
         .init = pl180_init,
     },
     .send_cmd = pl180_send_cmd,
+    .read = pl180_read,
 };
 
 DRIVER_EXPORT(mmc, &pl180_ops.std);

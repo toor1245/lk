@@ -7,12 +7,16 @@
  */
 
 #include <stdint.h>
+
 #include <lk/init.h>
 #include <lk/list.h>
 #include <lk/trace.h>
+
 #include <dev/driver.h>
 #include <dev/mmc.h>
 #include <dev/class/mmc.h>
+
+#include <lib/bio.h>
 
 #define LOCAL_TRACE 1
 
@@ -145,6 +149,16 @@ static void mmc_init(uint level) {
 
     parse_cid(cmd.resp, &cid);
     trace_cid(&cid);
+
+    char buffer[512] = { 0 };
+    struct mmc_read_info info = (struct mmc_read_info){
+        .dst = buffer,
+        .blkcount = 512,
+        .blksize = 1,
+    };
+    class_mmc_read(dev, &info);
+    buffer[511] = '\0';
+    LTRACEF("value: %s\n", buffer);
 }
 
 LK_INIT_HOOK(mmc, &mmc_init, LK_INIT_LEVEL_PLATFORM);
