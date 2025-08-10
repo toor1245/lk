@@ -20,12 +20,12 @@
 
 #define LOCAL_TRACE 1
 
-#define CARD_STATUS_ACMD	(1 << 5)
+#define CARD_STATUS_ACMD    (1 << 5)
 
 /* Card registers mask */
-#define OCR_VOLTAGE_MASK	(0x00FFFF80)
-#define OCR_ACCESS_MODE_MASK	(0x60000000)
-#define OCR_BUSY_MASK		(0x80000000)
+#define OCR_VOLTAGE_MASK    (0x00FFFF80)
+#define OCR_ACCESS_MODE_MASK    (0x60000000)
+#define OCR_BUSY_MASK       (0x80000000)
 
 static struct list_node mmc_devices;
 
@@ -54,7 +54,7 @@ static void parse_cid(uint32_t resp[4], struct mmc_cid *cid) {
     /* year offset from 2000 */
     cid->mdt_y = 2000 + ((mdt >> 4) & 0xFF);
     /* month 1-12 */
-    cid->mdt_m = mdt & 0x0F;			
+    cid->mdt_m = mdt & 0x0F;
     cid->crc = (resp[3] >> 1) & 0x7F;
 }
 
@@ -95,55 +95,55 @@ static void mmc_init(uint level) {
     if (err < 0)
         return;
 
-    cmd = (struct mmc_cmd){
-	.idx = MMC_CMD_GO_IDLE_STATE, 
-	.resp_type = MMC_RESP_NONE,
-	.arg = 0,
+    cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_GO_IDLE_STATE,
+        .resp_type = MMC_RESP_NONE,
+        .arg = 0,
     };
     err = class_mmc_send_cmd(dev, &cmd);
     if (err < 0) {
-	LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
         return;
     }
 
-    cmd = (struct mmc_cmd){
-	.idx = SD_APP_CMD,
-	.resp_type = MMC_RESP_R48,
-	.arg = 0,
+    cmd = (struct mmc_cmd) {
+        .idx = SD_APP_CMD,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
     };
     err = class_mmc_send_cmd(dev, &cmd);
     if (err < 0) {
-	LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
         return;
     }
     if ((cmd.resp[0] & CARD_STATUS_ACMD) == 0) {
         LTRACEF("Failed to enable Application Command\n");
-	return;
+        return;
     }
 
-    cmd = (struct mmc_cmd){
-	.idx = SD_CMD_SEND_OP_COND,
-	.resp_type = MMC_RESP_R48,
-	.arg = 0,
+    cmd = (struct mmc_cmd) {
+        .idx = SD_CMD_SEND_OP_COND,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
     };
     err = class_mmc_send_cmd(dev, &cmd);
     if (err < 0) {
-	LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
         return;
     }
     if ((cmd.resp[0] & OCR_BUSY_MASK) == 0) {
-	LTRACEF("Card is busy or host ommited voltage range\n");
-	return;
+        LTRACEF("Card is busy or host ommited voltage range\n");
+        return;
     }
 
-    cmd = (struct mmc_cmd){
-	.idx = MMC_CMD_ALL_SEND_CID,
-	.resp_type = MMC_RESP_R138,
-	.arg = 0,
+    cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_ALL_SEND_CID,
+        .resp_type = MMC_RESP_R138,
+        .arg = 0,
     };
     err = class_mmc_send_cmd(dev, &cmd);
     if (err < 0) {
-	LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
         return;
     }
 
@@ -151,7 +151,7 @@ static void mmc_init(uint level) {
     trace_cid(&cid);
 
     char buffer[512] = { 0 };
-    struct mmc_read_info info = (struct mmc_read_info){
+    struct mmc_read_info info = (struct mmc_read_info) {
         .dst = buffer,
         .blkcount = 512,
         .blksize = 1,
