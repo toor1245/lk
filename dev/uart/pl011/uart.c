@@ -15,8 +15,6 @@
 #include <kernel/thread.h>
 #include <platform/interrupts.h>
 
-#define LOCAL_TRACE 0
-
 // PL011 UART driver
 
 // PL011 registers
