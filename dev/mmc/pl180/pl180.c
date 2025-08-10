@@ -23,7 +23,7 @@
 
 #include "mci.h"
 
-#define LOCAL_TRACE 1 
+#define LOCAL_TRACE 1
 
 static inline void delay(lk_time_t delay) {
     lk_time_t start = current_time();
@@ -62,7 +62,7 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
     uint32_t host_status = 0;
     bool has_resp = (cmd->resp_type == MMC_RESP_R48) || (cmd->resp_type == MMC_RESP_R138);
 
-    LTRACEF("cmd idx: 0x%x\n", cmd->idx); 
+    LTRACEF("cmd idx: 0x%x\n", cmd->idx);
     LTRACEF("cmd arg: 0x%x\n", cmd->arg);
 
     write_mci_reg(base, MCI_ARG, cmd->arg);
@@ -85,13 +85,13 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
 
     do {
         host_status = read_mci_reg(base, MCI_STAT) & clr_mask;
-	LTRACEF("host_status: 0x%x\n", host_status);	
-    } while(!host_status);
+        LTRACEF("host_status: 0x%x\n", host_status);
+    } while (!host_status);
 
     write_mci_reg(base, MCI_CLR, clr_mask);
-   
+
     if (host_status & MCI_CLR_CMD_TIMEOUT) {
-        return ERR_TIMED_OUT;    
+        return ERR_TIMED_OUT;
     }
     if (host_status & MCI_CLR_CMD_CRC_FAIL) {
         return ERR_CRC_FAIL;
@@ -103,10 +103,10 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
         cmd->resp[2] = read_mci_reg(base, MCI_RESP2);
         cmd->resp[3] = read_mci_reg(base, MCI_RESP3);
 
-	trace_cmd_resp(cmd);
+        trace_cmd_resp(cmd);
     }
 
-    return NO_ERROR;   
+    return NO_ERROR;
 }
 
 static status_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
@@ -144,14 +144,14 @@ static status_t pl180_read(struct device *dev, struct mmc_read_info *info) {
     dctrl_reg |= (shift << 4);
     write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
 
-    cmd = (struct mmc_cmd){
-	.idx = MMC_CMD_READ_SINGLE_BLK,
-	.resp_type = MMC_RESP_R48,
-	.arg = 0,
+    cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_READ_SINGLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
     };
     res = class_mmc_send_cmd(dev, &cmd);
     if (res < 0) {
-	LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, res);
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, res);
         return res;
     }
 
