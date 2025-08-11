@@ -7,6 +7,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include <lk/init.h>
 #include <lk/list.h>
@@ -15,8 +16,6 @@
 #include <dev/driver.h>
 #include <dev/mmc.h>
 #include <dev/class/mmc.h>
-
-#include <lib/bio.h>
 
 #define LOCAL_TRACE 1
 
@@ -150,15 +149,33 @@ static void mmc_init(uint level) {
     parse_cid(cmd.resp, &cid);
     trace_cid(&cid);
 
-    char buffer[512] = { 0 };
-    struct mmc_read_info info = (struct mmc_read_info) {
-        .dst = buffer,
+    char dst[512] = { 0 };
+    struct mmc_xfer_info info = (struct mmc_xfer_info) {
+        .buffer = dst,
         .blkcount = 512,
         .blksize = 1,
     };
     class_mmc_read(dev, &info);
-    buffer[511] = '\0';
-    LTRACEF("value: %s\n", buffer);
+    dst[511] = '\0';
+    LTRACEF("Before write: %s\n", dst);
+
+    char src[512] = "New write text!!";
+    struct mmc_xfer_info write_info = (struct mmc_xfer_info) {
+        .buffer = src,
+        .blkcount = 512,
+        .blksize = 1,
+    };
+    class_mmc_write(dev, &write_info);
+
+    memset(dst, 0, 512);
+    struct mmc_xfer_info rinfo = (struct mmc_xfer_info) {
+        .buffer = dst,
+        .blkcount = 512,
+        .blksize = 1,
+    };
+    class_mmc_read(dev, &rinfo);
+    dst[511] = '\0';
+    LTRACEF("After write: %s\n", dst);
 }
 
 LK_INIT_HOOK(mmc, &mmc_init, LK_INIT_LEVEL_PLATFORM);

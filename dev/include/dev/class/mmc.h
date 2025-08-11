@@ -24,8 +24,9 @@ struct mmc_cmd {
     enum mmc_resp resp_type;
 };
 
-struct mmc_read_info {
-    char *dst;
+/* MMC/SD data transfer info */
+struct mmc_xfer_info {
+    char *buffer;
     uint32_t blkcount;
     uint32_t blksize;
 };
@@ -35,12 +36,14 @@ struct mmc_ops {
     struct driver_ops std;
  
     status_t (*send_cmd)(struct device *dev, struct mmc_cmd *cmd);
-    status_t (*read)(struct device *dev, struct mmc_read_info *info);
+    status_t (*read)(struct device *dev, struct mmc_xfer_info *info);
+    status_t (*write)(struct device *dev, struct mmc_xfer_info *info);
 };
 
 __BEGIN_CDECLS
 
 status_t class_mmc_send_cmd(struct device *dev, struct mmc_cmd *cmd);
-status_t class_mmc_read(struct device *dev, struct mmc_read_info *info);
+status_t class_mmc_read(struct device *dev, struct mmc_xfer_info *info);
+status_t class_mmc_write(struct device *dev, struct mmc_xfer_info *info);
 
 __END_CDECLS

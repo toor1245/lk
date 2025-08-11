@@ -23,6 +23,8 @@
 
 #include "mci.h"
 
+#define FIFO_BURST_SIZE 8
+
 #define LOCAL_TRACE 1
 
 static inline void delay(lk_time_t delay) {
@@ -110,18 +112,17 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
 }
 
 static status_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
-    uint32_t status, status_err, reg;
     uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT | MCI_STAT_RX_OVERRUN;
     char *tmp = dst;
 
     while (xfercount >= sizeof(uint32_t)) {
-        status = read_mci_reg(base, MCI_STAT);
-        status_err = status & status_err_mask;
+        uint32_t status = read_mci_reg(base, MCI_STAT);
+        uint32_t status_err = status & status_err_mask;
         if (status_err)
             return ERR_IO;
 
         if (status & MCI_STAT_RX_DATA_AVLBL) {
-            reg = read_mci_reg(base, MCI_DFIFO);
+            uint32_t reg = read_mci_reg(base, MCI_DFIFO);
             memcpy(tmp, &reg, sizeof(uint32_t));
             tmp += sizeof(uint32_t);
             xfercount -= sizeof(uint32_t);
@@ -131,16 +132,14 @@ static status_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
     return NO_ERROR;
 }
 
-static status_t pl180_read(struct device *dev, struct mmc_read_info *info) {
+static status_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
     const struct pl180_config *config = dev->config;
     uint64_t xfercount = info->blkcount * info->blksize;
-    uint32_t shift;
-    uint32_t dctrl_reg;
     status_t res = NO_ERROR;
     struct mmc_cmd cmd = { 0 };
 
-    shift = log2_uint(info->blksize);
-    dctrl_reg = (1 << 0) | (1 << 1); // ENABLE + Read
+    uint32_t shift = log2_uint(info->blksize);
+    uint32_t dctrl_reg = (1 << 0) | (1 << 1); // ENABLE + Read
     dctrl_reg |= (shift << 4);
     write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
 
@@ -155,7 +154,63 @@ static status_t pl180_read(struct device *dev, struct mmc_read_info *info) {
         return res;
     }
 
-    return pl180_read_fifo(config->base, info->dst, xfercount);
+    return pl180_read_fifo(config->base, info->buffer, xfercount);
+}
+
+static status_t pl180_write_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
+    uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT;
+    uint32_t *tmp = (uint32_t *)dst;
+
+    while (xfercount) {
+        uint32_t status = read_mci_reg(base, MCI_STAT);
+        uint32_t status_err = status & status_err_mask;
+        if (status_err)
+            return ERR_IO;
+
+        if (!(status & MCI_STAT_TX_FIFO_HALF_EMPTY))
+            continue;
+
+        if (xfercount >= FIFO_BURST_SIZE * sizeof(uint32_t)) {
+            for (uint32_t i = 0; i < FIFO_BURST_SIZE; i++) {
+                write_mci_reg(base, MCI_DFIFO, tmp[i]);
+            }
+            tmp += FIFO_BURST_SIZE;
+            xfercount -= FIFO_BURST_SIZE * sizeof(uint32_t);
+        } else {
+            while (xfercount >= sizeof(uint32_t)) {
+                write_mci_reg(base, MCI_DFIFO, *tmp);
+                tmp++;
+                xfercount -= sizeof(uint32_t);
+            }
+        }
+    }
+
+    return NO_ERROR;
+}
+
+static status_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
+    const struct pl180_config *config = dev->config;
+    uint64_t xfercount = info->blkcount * info->blksize;
+    status_t res = NO_ERROR;
+    struct mmc_cmd cmd = { 0 };
+    uint32_t shift = log2_uint(info->blksize);
+
+    uint32_t dctrl_reg = (1 << 0); // ENABLE + Write
+    dctrl_reg |= (shift << 4);
+    write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
+
+    cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_WRITE_SINGLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
+    };
+    res = class_mmc_send_cmd(dev, &cmd);
+    if (res < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, res);
+        return res;
+    }
+
+    return pl180_write_fifo(config->base, info->buffer, xfercount);
 }
 
 static struct mmc_ops pl180_ops = {
@@ -164,6 +219,7 @@ static struct mmc_ops pl180_ops = {
     },
     .send_cmd = pl180_send_cmd,
     .read = pl180_read,
+    .write = pl180_write,
 };
 
 DRIVER_EXPORT(mmc, &pl180_ops.std);
