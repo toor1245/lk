@@ -111,32 +111,74 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
     return NO_ERROR;
 }
 
-static status_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
+static ssize_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
     uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT | MCI_STAT_RX_OVERRUN;
     char *tmp = dst;
+    ssize_t bytes_read = 0;
+    ssize_t err = NO_ERROR;
 
     while (xfercount >= sizeof(uint32_t)) {
         uint32_t status = read_mci_reg(base, MCI_STAT);
         uint32_t status_err = status & status_err_mask;
-        if (status_err)
-            return ERR_IO;
-
+        if (status_err) {
+            err = ERR_IO;
+	    LTRACEF("status_err: 0x%x\n", xfercount);
+            goto err;
+        }
         if (status & MCI_STAT_RX_DATA_AVLBL) {
             uint32_t reg = read_mci_reg(base, MCI_DFIFO);
             memcpy(tmp, &reg, sizeof(uint32_t));
             tmp += sizeof(uint32_t);
             xfercount -= sizeof(uint32_t);
+            bytes_read += sizeof(uint32_t);
         }
     }
 
-    return NO_ERROR;
+err:
+    /* return error or bytes read */
+    return (err >= 0) ? bytes_read : err;
 }
 
-static status_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
+static ssize_t pl180_read_multi(struct device *dev, struct mmc_xfer_info *info) {
+    const struct pl180_config *config = dev->config;
+    uint64_t xfercount = info->blkcount * info->blksize;
+
+    // Set length and data control
+    write_mci_reg(config->base, MCI_DLEN, xfercount);
+    uint32_t shift = log2_uint(info->blksize);
+    uint32_t dctrl_reg = (1 << 0) | (1 << 1) | (shift << 4); // ENABLE + Read
+    write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
+
+    // CMD18: read multiple blocks
+    struct mmc_cmd cmd = {
+        .idx = MMC_CMD_READ_MULTIPLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = info->block,  // block address
+    };
+    status_t res = class_mmc_send_cmd(dev, &cmd);
+    if (res < 0) return res;
+
+    // Read FIFO
+    ssize_t rd = pl180_read_fifo(config->base, info->buffer, xfercount);
+
+    // Stop transmission
+    struct mmc_cmd stop = {
+        .idx = MMC_CMD_STOP_TRANSMISSION,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
+    };
+    class_mmc_send_cmd(dev, &stop);
+
+    return rd;
+}
+
+static ssize_t pl180_read_single(struct device *dev, struct mmc_xfer_info *info) {
     const struct pl180_config *config = dev->config;
     uint64_t xfercount = info->blkcount * info->blksize;
     status_t res = NO_ERROR;
     struct mmc_cmd cmd = { 0 };
+
+    write_mci_reg(config->base, MCI_DLEN, xfercount);
 
     uint32_t shift = log2_uint(info->blksize);
     uint32_t dctrl_reg = (1 << 0) | (1 << 1); // ENABLE + Read
@@ -146,7 +188,7 @@ static status_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
     cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_READ_SINGLE_BLK,
         .resp_type = MMC_RESP_R48,
-        .arg = 0,
+        .arg = info->block,
     };
     res = class_mmc_send_cmd(dev, &cmd);
     if (res < 0) {
@@ -157,15 +199,28 @@ static status_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
     return pl180_read_fifo(config->base, info->buffer, xfercount);
 }
 
-static status_t pl180_write_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
+static ssize_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
+    if (info->blkcount == 1) {
+	LTRACEF("read single blk, blkcount=0x%x, blksize=0x%x\n");
+	return pl180_read_single(dev, info);
+    }
+    LTRACEF("read multiple blk, blkcount=0x%x, blksize=0x%x\n");
+    return pl180_read_multi(dev, info);
+}
+
+static ssize_t pl180_write_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
     uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT;
     uint32_t *tmp = (uint32_t *)dst;
+    ssize_t bytes_written = 0;
+    ssize_t err = NO_ERROR;
 
     while (xfercount) {
         uint32_t status = read_mci_reg(base, MCI_STAT);
         uint32_t status_err = status & status_err_mask;
-        if (status_err)
-            return ERR_IO;
+        if (status_err) {
+            err = ERR_IO;
+            goto err;
+        }
 
         if (!(status & MCI_STAT_TX_FIFO_HALF_EMPTY))
             continue;
@@ -176,24 +231,68 @@ static status_t pl180_write_fifo(uintptr_t base, char *dst, uint64_t xfercount) 
             }
             tmp += FIFO_BURST_SIZE;
             xfercount -= FIFO_BURST_SIZE * sizeof(uint32_t);
+            bytes_written += FIFO_BURST_SIZE * sizeof(uint32_t);
         } else {
             while (xfercount >= sizeof(uint32_t)) {
                 write_mci_reg(base, MCI_DFIFO, *tmp);
                 tmp++;
                 xfercount -= sizeof(uint32_t);
+                bytes_written += sizeof(uint32_t);
             }
         }
     }
 
-    return NO_ERROR;
+err:
+    /* return error or bytes written */
+    return (err >= 0) ? bytes_written : err;
 }
 
-static status_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
+static ssize_t pl180_write_multi(struct device *dev, struct mmc_xfer_info *info) {
+    const struct pl180_config *config = dev->config;
+    uint64_t xfercount = info->blkcount * info->blksize;
+    status_t res = NO_ERROR;
+    struct mmc_cmd cmd = {0};
+
+    write_mci_reg(config->base, MCI_DLEN, xfercount);
+
+    uint32_t shift = log2_uint(info->blksize);
+    uint32_t dctrl_reg = (1 << 0); // ENABLE + Write
+    dctrl_reg |= (shift << 4);
+    write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
+
+    // Issue CMD25 (multi-block write)
+    cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_WRITE_MULTIPLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = info->block,
+    };
+    res = class_mmc_send_cmd(dev, &cmd);
+    if (res < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, res);
+        return res;
+    }
+
+    ssize_t wr = pl180_write_fifo(config->base, info->buffer, xfercount);
+
+    // Send CMD12 (STOP_TRANSMISSION)
+    struct mmc_cmd stop = {
+        .idx = MMC_CMD_STOP_TRANSMISSION,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
+    };
+    class_mmc_send_cmd(dev, &stop);
+
+    return wr;
+}
+
+static ssize_t pl180_write_single(struct device *dev, struct mmc_xfer_info *info) {
     const struct pl180_config *config = dev->config;
     uint64_t xfercount = info->blkcount * info->blksize;
     status_t res = NO_ERROR;
     struct mmc_cmd cmd = { 0 };
     uint32_t shift = log2_uint(info->blksize);
+
+    write_mci_reg(config->base, MCI_DLEN, xfercount);
 
     uint32_t dctrl_reg = (1 << 0); // ENABLE + Write
     dctrl_reg |= (shift << 4);
@@ -202,7 +301,7 @@ static status_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
     cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_WRITE_SINGLE_BLK,
         .resp_type = MMC_RESP_R48,
-        .arg = 0,
+        .arg = info->block * 512,
     };
     res = class_mmc_send_cmd(dev, &cmd);
     if (res < 0) {
@@ -211,6 +310,15 @@ static status_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
     }
 
     return pl180_write_fifo(config->base, info->buffer, xfercount);
+}
+
+static ssize_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
+    if (info->blkcount == 1) {
+	LTRACEF("write single blk, blkcount=0x%x, blksize=0x%x\n");
+	return pl180_write_single(dev, info);
+    }
+    LTRACEF("write multiple blk, blkcount=0x%x, blksize=0x%x\n");
+    return pl180_write_multi(dev, info);
 }
 
 static struct mmc_ops pl180_ops = {

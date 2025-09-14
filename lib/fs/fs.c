@@ -17,7 +17,7 @@
 #include <lk/init.h>
 #include <kernel/mutex.h>
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 struct fs_mount {
     struct list_node node;
@@ -153,6 +153,7 @@ static status_t mount(const char *path, const char *device, const struct fs_impl
     /* see if there's already something at this path, abort if there is */
     mount = find_mount(temppath, NULL);
     if (mount) {
+	LTRACEF("Failed to find mount: %s\n", temppath);
         put_mount(mount);
         return ERR_ALREADY_MOUNTED;
     }
@@ -161,8 +162,10 @@ static status_t mount(const char *path, const char *device, const struct fs_impl
     bdev_t *dev = NULL;
     if (device && device[0] != '\0') {
         dev = bio_open(device);
-        if (!dev)
+        if (!dev) {
+	    LTRACEF("bio_open failed: %s\n", device);
             return ERR_NOT_FOUND;
+        }
     }
 
     /* call into the fs implementation */

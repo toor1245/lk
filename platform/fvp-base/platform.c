@@ -87,4 +87,4 @@ static const struct pl180_config config = {
     .base = MCI_BASE,
 };
 
-DEVICE_INSTANCE(mmc, pl180, &config, 0);
+DEVICE_INSTANCE(mmc, mmc, &config, 0);

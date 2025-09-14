@@ -17,6 +17,7 @@ idx_shift               .req x12
 page_table              .req x13
 new_page_table          .req x14
 phys_offset             .req x15
+uart_offset		.req x16
 
 cpuid                   .req x19
 page_table1             .req x21
@@ -37,6 +38,10 @@ arm_reset:
 
     /* if we came in at higher than EL1, drop down to EL1 */
     bl      arm64_elX_to_el1
+
+    adrp    tmp, __boot_stack_end
+    add     tmp, tmp, #:lo12:__boot_stack_end
+    mov     sp, tmp
 
     /* disable EL1 FPU traps */
     mov     tmp, #(0b11<<20)
@@ -85,6 +90,20 @@ arm_reset:
     /* save the boot EL */
     adrp    tmp, arm64_boot_el
     str     boot_el, [tmp, #:lo12:arm64_boot_el]
+
+    /* enable pl011 uart for FVP debug MMU */
+/*
+    bl      pl011_uart0_enable
+
+    mov     x0, #'a'
+    bl      pl011_uart0_putc
+
+    mov	    x0, page_table1
+    bl      pl011_uart0_print_hex
+
+    mov     x0, #'\n'
+    bl      pl011_uart0_putc
+*/
 
 #if WITH_KERNEL_VM
     /* walk through all the entries in the translation table, setting them up */
@@ -504,6 +523,10 @@ END_DATA(arm64_boot_args)
 DATA(arm64_boot_el)
     .skip 8
 END_DATA(arm64_boot_el)
+DATA(__boot_stack)
+    .skip ARCH_DEFAULT_STACK_SIZE * SMP_MAX_CPUS
+END_DATA(__boot_stack)
+DATA(__boot_stack_end)
 
 #if WITH_SMP
 .data
@@ -518,3 +541,4 @@ DATA(__stack)
     .skip ARCH_DEFAULT_STACK_SIZE * SMP_MAX_CPUS
 END_DATA(__stack)
 DATA(__stack_end)
+

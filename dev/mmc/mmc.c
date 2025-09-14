@@ -13,6 +13,8 @@
 #include <lk/list.h>
 #include <lk/trace.h>
 
+#include <lib/bio.h>
+
 #include <dev/driver.h>
 #include <dev/mmc.h>
 #include <dev/class/mmc.h>
@@ -26,6 +28,15 @@
 #define OCR_ACCESS_MODE_MASK    (0x60000000)
 #define OCR_BUSY_MASK       (0x80000000)
 
+struct mmc_device {
+    struct device *dev;
+    bdev_t bdev;
+    uint64_t capacity;
+    uint64_t blksize;
+    bnum_t blkcount;
+};
+
+static struct mmc_device mmc;
 static struct list_node mmc_devices;
 
 static void parse_cid(uint32_t resp[4], struct mmc_cid *cid) {
@@ -67,6 +78,45 @@ void trace_cid(const struct mmc_cid *cid) {
     LTRACEF("CRC7 Checksum: 0x%02X\n", cid->crc);
 }
 
+static ssize_t mmc_bdev_read_block(struct bdev *bdev, void *buf, bnum_t block, uint count) {
+    struct mmc_xfer_info info = (struct mmc_xfer_info) {
+        .buffer = buf,
+        .blkcount = count,
+        .blksize = mmc.blksize,
+	.block = block, 
+    };
+    return class_mmc_read(mmc.dev, &info);
+}
+
+
+//ssize_t (*write_block)(struct bdev *, const void *buf, bnum_t block, uint count);
+
+static ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, uint count) {
+    struct mmc_xfer_info info = (struct mmc_xfer_info) {
+        .buffer = buf,
+        .blkcount = count,
+        .blksize = mmc.blksize,
+	.block = block, 
+    };
+    return class_mmc_write(mmc.dev, &info);
+}
+
+static void mmc_bdev_init(void) {
+    mmc.blksize = 512;
+    mmc.blkcount = 4;
+    mmc.capacity = mmc.blksize * mmc.blkcount; // 16MB
+
+    bio_initialize_bdev(&mmc.bdev, "mmc",
+                        mmc.blksize, mmc.blkcount,
+                        0, NULL, BIO_FLAGS_NONE);
+
+    /* override our block device hooks */
+    mmc.bdev.read_block = &mmc_bdev_read_block;
+    mmc.bdev.write_block = &mmc_bdev_write_block;
+
+    bio_register_device(&mmc.bdev);
+}
+
 static void mmc_init(uint level) {
     status_t err;
     struct device *dev = NULL;
@@ -93,6 +143,8 @@ static void mmc_init(uint level) {
     err = device_init(dev);
     if (err < 0)
         return;
+
+    mmc.dev = dev;
 
     cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_GO_IDLE_STATE,
@@ -123,7 +175,8 @@ static void mmc_init(uint level) {
     cmd = (struct mmc_cmd) {
         .idx = SD_CMD_SEND_OP_COND,
         .resp_type = MMC_RESP_R48,
-        .arg = 0,
+        .arg = 0x40300000,
+//        .arg = 0,
     };
     err = class_mmc_send_cmd(dev, &cmd);
     if (err < 0) {
@@ -149,6 +202,8 @@ static void mmc_init(uint level) {
     parse_cid(cmd.resp, &cid);
     trace_cid(&cid);
 
+    mmc_bdev_init();
+#if 0
     char dst[512] = { 0 };
     struct mmc_xfer_info info = (struct mmc_xfer_info) {
         .buffer = dst,
@@ -176,6 +231,7 @@ static void mmc_init(uint level) {
     class_mmc_read(dev, &rinfo);
     dst[511] = '\0';
     LTRACEF("After write: %s\n", dst);
+#endif
 }
 
 LK_INIT_HOOK(mmc, &mmc_init, LK_INIT_LEVEL_PLATFORM);

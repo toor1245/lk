@@ -17,8 +17,12 @@
 #define MMC_CMD_SET_RELATIVE_ADDR	(3)
 #define MMC_CMD_SET_DSR			(4)
 #define MMC_CMD_SWITCH			(6)
+#define MMC_CMD_STOP_TRANSMISSION	(12)
+#define MMC_CMD_SET_BLOCKLEN		(16)
 #define MMC_CMD_READ_SINGLE_BLK		(17)
+#define MMC_CMD_READ_MULTIPLE_BLK	(18)
 #define MMC_CMD_WRITE_SINGLE_BLK	(24)
+#define MMC_CMD_WRITE_MULTIPLE_BLK	(25)
 
 /* SD card commands indexes */
 #define SD_CMD_SEND_OP_COND	(41)

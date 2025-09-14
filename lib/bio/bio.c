@@ -19,7 +19,7 @@
 #include <lk/init.h>
 #include <arch/atomic.h>
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 static struct {
     struct list_node list;
@@ -337,6 +337,8 @@ bdev_t *bio_open(const char *name) {
     bdev_t *entry;
     mutex_acquire(&bdevs.lock);
     list_for_every_entry(&bdevs.list, entry, bdev_t, node) {
+	LTRACEF("entry->name: %s\n", entry->name);
+	LTRACEF("entry->ref: %d\n", entry->ref);
         DEBUG_ASSERT(entry->ref > 0);
         if (!strcmp(entry->name, name)) {
             bdev = entry;
