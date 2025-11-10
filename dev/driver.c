@@ -125,7 +125,7 @@ status_t device_get_list_type(const char *type, struct list_node *out_list) {
         return ERR_INVALID_ARGS;
     }
 
-     for (struct device *dev = &__start_devices; dev != &__stop_devices; dev++) {
+     for (struct device *dev = __start_devices; dev != __stop_devices; dev++) {
         if (strcmp(dev->driver->type, type) != 0)
             continue;
 
