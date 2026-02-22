@@ -134,6 +134,12 @@ static constexpr auto EFI_ERASE_BLOCK_PROTOCOL_GUID =
             0x4926,
             {0xaa, 0xef, 0x99, 0x18, 0xe7, 0x72, 0xd9, 0x87}};
 
+static constexpr auto EFI_UNICODE_COLLATION_PROTOCOL2_GUID =
+    EfiGuid{0xa4c751fc,
+            0x23ae,
+            0x4c3e,
+            {0x92, 0xe9, 0x49, 0x64, 0xcf, 0x63, 0xf3, 0x49}};
+
 // This function would be called from GBL before jumping into android kernel
 // LK provides a default no-op implementation that is weakly linked,
 // different platforms can override with their own implementation.

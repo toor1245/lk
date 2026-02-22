@@ -17,6 +17,7 @@
 #include "boot_service_provider.h"
 
 #include <lk/compiler.h>
+#include <lk/list.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,19 @@
 #include "uefi_platform.h"
 
 namespace {
+
+typedef struct {
+  struct list_node link;
+  struct list_node protocols;
+} EfiHandleInternal;
+
+typedef struct {
+    struct list_node node;
+    EfiGuid guid;
+    void* interface;
+} EfiProtocolInterface;
+
+struct list_node handle_list = LIST_INITIAL_VALUE(handle_list);
 
 EfiStatus unload(EfiHandle handle) { return EFI_STATUS_SUCCESS; }
 
@@ -88,8 +102,27 @@ EfiStatus register_protocol_notify(const EfiGuid *protocol, EfiEvent event,
 EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
                         const EfiGuid *protocol, const void *search_key,
                         size_t *buf_size, EfiHandle *buf) {
+  if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_ALL_HANDLES) {
+    printf("%s: Unsupported search_type EFI_LOCATE_HANDLE_SEARCH_TYPE_ALL_HANDLES\n",
+      __FUNCTION__);
+    return EFI_STATUS_UNSUPPORTED;
+  } else if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_REGISTER_NOTIFY) {
+    printf("%s: Unsupported search_type EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_REGISTER_NOTIFY\n",
+      __FUNCTION__);
+    return EFI_STATUS_UNSUPPORTED;
+  } else if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) {
+    printf("%s: search_type=EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL, search_key=%p\n",
+      __FUNCTION__, search_key);
+    if (protocol == nullptr) {
+      printf("%s: protocol must be provided for EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL\n",
+        __FUNCTION__);
+      return EFI_STATUS_INVALID_PARAMETER;
+    }
+  } else {
+    printf("%s: Unknown search_type %d\n", __FUNCTION__, search_type);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
 
-  printf("%s is unsupported\n", __FUNCTION__);
   return EFI_STATUS_UNSUPPORTED;
 }
 
@@ -261,6 +294,10 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
     }
     return EFI_STATUS_SUCCESS;
   }
+  else if (guid_eq(protocol, EFI_UNICODE_COLLATION_PROTOCOL2_GUID)) {
+    printf("%s(EFI_UNICODE_COLLATION_PROTOCOL2_GUID) Unsupported\n",__FUNCTION__);
+    return EFI_STATUS_UNSUPPORTED;
+  }
   printf("%s is unsupported 0x%x 0x%x 0x%x 0x%llx\n", __FUNCTION__,
          protocol->data1, protocol->data2, protocol->data3,
          *(uint64_t *)&protocol->data4);
@@ -371,6 +408,75 @@ EfiStatus free_pages(EfiPhysicalAddr memory, size_t pages) {
   return ::free_pages(reinterpret_cast<void *>(memory), pages);
 }
 
+EfiStatus create_handle(EfiHandle *handle) {
+  EfiHandleInternal *h = reinterpret_cast<EfiHandleInternal *>(
+    uefi_malloc(sizeof(EfiHandleInternal))
+  );
+
+  if (h == nullptr) {
+    return EFI_STATUS_OUT_OF_RESOURCES;
+  }
+
+  list_initialize(&h->link);
+  list_initialize(&h->protocols);
+  list_add_tail(&handle_list, &h->link);
+
+  *handle = reinterpret_cast<EfiHandle>(h);
+
+  return EFI_STATUS_SUCCESS;
+}
+
+EfiHandleInternal *search_handle_internal(EfiHandle handle) {
+  EfiHandleInternal *h;
+  
+  if (handle) {
+    return nullptr;
+  }
+  
+  list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
+    if (reinterpret_cast<EfiHandle>(h) == handle) {
+      return h;
+    }
+  }
+
+  return nullptr;
+}
+
+EfiStatus search_protocol(EfiHandle handle,
+		          const EfiGuid *protocol) {
+  return EFI_STATUS_SUCCESS;
+}
+
+EfiStatus add_protocol(EfiHandle handle,
+                       const EfiGuid *protocol,
+		       void *intf) {
+  
+  return EFI_STATUS_SUCCESS;
+}
+
+EfiStatus install_protocol_interface(EfiHandle* handle,
+                                     const EfiGuid* protocol,
+                                     EfiInterfaceType intf_type,
+                                     void* intf) {
+  EfiStatus status;
+
+  if (!handle || !protocol || intf_type != EFI_INTERFACE_TYPE_EFI_NATIVE_INTERFACE) {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  if (!*handle) {
+    status = create_handle(handle);
+    if (status != EFI_STATUS_SUCCESS) {
+      return status;
+    }
+    printf("%s(new handle=%p)\n", __FUNCTION__, *handle);
+  } else {
+    printf("%s(handle=%p)\n", __FUNCTION__, *handle);
+  }
+
+  return add_protocol(*handle, protocol, intf);
+}
+
 } // namespace
 
 void setup_boot_service_table(EfiBootService *service) {
@@ -406,4 +512,5 @@ void setup_boot_service_table(EfiBootService *service) {
   service->raise_tpl = raise_tpl;
   service->restore_tpl = restore_tpl;
   service->set_watchdog_timer = set_watchdog_timer;
+  service->install_protocol_interface = install_protocol_interface;
 }
