@@ -30,6 +30,7 @@
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
 #include <uefi/protocols/loaded_image_protocol.h>
 #include <uefi/types.h>
+#include <stdarg.h>
 
 #include "blockio2_protocols.h"
 #include "blockio_protocols.h"
@@ -46,9 +47,10 @@ typedef struct {
 } EfiHandleInternal;
 
 typedef struct {
-    struct list_node node;
+    struct list_node link;
     EfiGuid guid;
     void* interface;
+    struct list_node open_intfs;
 } EfiProtocolInterface;
 
 struct list_node handle_list = LIST_INITIAL_VALUE(handle_list);
@@ -61,6 +63,50 @@ bool guid_eq(const EfiGuid *a, const EfiGuid *b) {
 
 bool guid_eq(const EfiGuid *a, const EfiGuid &b) {
   return memcmp(a, &b, sizeof(*a)) == 0;
+}
+
+EfiHandleInternal *search_handle_internal(EfiHandle handle) {
+  EfiHandleInternal *h;
+  
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  
+  list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
+    if (reinterpret_cast<EfiHandle>(h) == handle) {
+      return h;
+    }
+  }
+
+  return nullptr;
+}
+
+EfiStatus search_protocol(EfiHandleInternal *handle,
+		          const EfiGuid *protocol,
+			  EfiProtocolInterface **protocol_intf) {
+  if (handle == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER) internal handle is null\n",
+	   __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  if (protocol == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER) protocol is null\n",
+	   __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  EfiProtocolInterface *i;
+  list_for_every_entry(&handle->protocols, i, EfiProtocolInterface, link) {
+    if (guid_eq(&i->guid, protocol)) {
+      if (protocol_intf) {
+        *protocol_intf = i;
+      }
+      return EFI_STATUS_SUCCESS;
+    }
+  }
+
+  return EFI_STATUS_NOT_FOUND;
 }
 
 EfiStatus handle_protocol(EfiHandle handle, const EfiGuid *protocol,
@@ -117,6 +163,40 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
       printf("%s: protocol must be provided for EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL\n",
         __FUNCTION__);
       return EFI_STATUS_INVALID_PARAMETER;
+    }
+
+    size_t size = 0;
+    EfiHandleInternal *h;
+    list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
+      if (search_protocol(h, protocol, nullptr) == EFI_STATUS_SUCCESS) {
+        size += sizeof(EfiHandle);
+      }
+    }
+
+    if (size == 0) {
+      printf("%s(EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) size is 0, no handles for protocol\n", __FUNCTION__);
+      return EFI_STATUS_NOT_FOUND;
+    }
+
+    if (buf_size == nullptr) {
+      return EFI_STATUS_INVALID_PARAMETER;
+    }
+
+    if (*buf_size < size) {
+      *buf_size = size;
+      return EFI_STATUS_BUFFER_TOO_SMALL;
+    }
+
+    *buf_size = size;
+
+    if (buf == nullptr) {
+      return EFI_STATUS_INVALID_PARAMETER;
+    }
+
+    list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
+      if (search_protocol(h, protocol, nullptr) == EFI_STATUS_SUCCESS) {
+        *buf++ = h;
+      }
     }
   } else {
     printf("%s: Unknown search_type %d\n", __FUNCTION__, search_type);
@@ -426,30 +506,52 @@ EfiStatus create_handle(EfiHandle *handle) {
   return EFI_STATUS_SUCCESS;
 }
 
-EfiHandleInternal *search_handle_internal(EfiHandle handle) {
-  EfiHandleInternal *h;
-  
-  if (handle) {
-    return nullptr;
-  }
-  
-  list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
-    if (reinterpret_cast<EfiHandle>(h) == handle) {
-      return h;
-    }
-  }
-
-  return nullptr;
-}
-
-EfiStatus search_protocol(EfiHandle handle,
-		          const EfiGuid *protocol) {
-  return EFI_STATUS_SUCCESS;
-}
-
 EfiStatus add_protocol(EfiHandle handle,
                        const EfiGuid *protocol,
 		       void *intf) {
+  EfiStatus status;
+
+  if (handle == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER), handle is null\n",
+           __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  if (protocol == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER), protocol is null\n",
+           __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  if (intf == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER), interface is null\n",
+           __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  EfiHandleInternal *h = search_handle_internal(handle);
+  if (h == nullptr) {
+    printf("%s(EFI_STATUS_INVALID_PARAMETER), failed to find internal handle\n",
+           __FUNCTION__);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  status = search_protocol(h, protocol, nullptr);
+  if (status != EFI_STATUS_NOT_FOUND) {
+    return EFI_STATUS_INVALID_PARAMETER;  
+  }
+
+  EfiProtocolInterface *protocol_intf = reinterpret_cast<EfiProtocolInterface *>(
+    uefi_malloc(sizeof(EfiProtocolInterface))
+  );
+  if (protocol_intf == nullptr) {
+    return EFI_STATUS_OUT_OF_RESOURCES;
+  }
+
+  memcpy(&protocol_intf->guid, protocol, sizeof(EfiGuid));
+  protocol_intf->interface = intf;
+  list_initialize(&protocol_intf->open_intfs);
+  list_add_tail(&h->protocols, &protocol_intf->link);
   
   return EFI_STATUS_SUCCESS;
 }
@@ -475,6 +577,47 @@ EfiStatus install_protocol_interface(EfiHandle* handle,
   }
 
   return add_protocol(*handle, protocol, intf);
+}
+
+EfiStatus install_multiple_protocol_interfaces_int(EfiHandle* handle,
+		                                   va_list ap) {
+  const EfiGuid *protocol;
+  void *protocol_interface;
+  EfiStatus ret = EFI_STATUS_SUCCESS;
+  va_list argptr_copy;
+
+  if (handle == nullptr)
+    return EFI_STATUS_INVALID_PARAMETER;
+
+  va_copy(argptr_copy, ap);
+
+  for (;;) {
+    protocol = va_arg(ap, EfiGuid*);
+    if (protocol == nullptr) {
+      break;
+    }
+    
+    protocol_interface = va_arg(ap, void*);
+    ret = install_protocol_interface(handle, protocol,
+    			             EFI_INTERFACE_TYPE_EFI_NATIVE_INTERFACE,
+    		                     protocol_interface);
+
+    if (ret != EFI_STATUS_SUCCESS) {
+      break;
+    }
+  }
+
+  return ret;
+} 
+
+EfiStatus install_multiple_protocol_interfaces(EfiHandle* handle, ...) {
+  va_list ap;
+
+  va_start(ap, handle);
+  EfiStatus status = install_multiple_protocol_interfaces_int(handle, ap);
+  va_end(ap);
+
+  return status;
 }
 
 } // namespace
@@ -513,4 +656,5 @@ void setup_boot_service_table(EfiBootService *service) {
   service->restore_tpl = restore_tpl;
   service->set_watchdog_timer = set_watchdog_timer;
   service->install_protocol_interface = install_protocol_interface;
+  service->install_multiple_protocol_interfaces = install_multiple_protocol_interfaces;
 }
