@@ -150,18 +150,18 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
                         size_t *buf_size, EfiHandle *buf) {
   if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_ALL_HANDLES) {
     printf("%s: Unsupported search_type EFI_LOCATE_HANDLE_SEARCH_TYPE_ALL_HANDLES\n",
-      __FUNCTION__);
+           __FUNCTION__);
     return EFI_STATUS_UNSUPPORTED;
   } else if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_REGISTER_NOTIFY) {
     printf("%s: Unsupported search_type EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_REGISTER_NOTIFY\n",
-      __FUNCTION__);
+           __FUNCTION__);
     return EFI_STATUS_UNSUPPORTED;
   } else if (search_type == EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) {
     printf("%s: search_type=EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL, search_key=%p\n",
-      __FUNCTION__, search_key);
+           __FUNCTION__, search_key);
     if (protocol == nullptr) {
       printf("%s: protocol must be provided for EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL\n",
-        __FUNCTION__);
+             __FUNCTION__);
       return EFI_STATUS_INVALID_PARAMETER;
     }
 
@@ -174,7 +174,8 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
     }
 
     if (size == 0) {
-      printf("%s(EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) size is 0, no handles for protocol\n", __FUNCTION__);
+      printf("%s(EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) size is 0, no handles for protocol\n",
+             __FUNCTION__);
       return EFI_STATUS_NOT_FOUND;
     }
 
