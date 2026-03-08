@@ -47,8 +47,11 @@
 #include "uefi/types.h"
 #include "uefi_platform.h"
 #include "variable_mem.h"
+#include "unicode_collation.h"
 
 namespace {
+
+EfiHandle root = NULL;
 
 constexpr auto EFI_SYSTEM_TABLE_SIGNATURE =
     static_cast<u64>(0x5453595320494249ULL);
@@ -211,6 +214,7 @@ int load_sections_and_execute(ImageReader *reader,
   reader->get_name(path, sizeof(path));
   path[sizeof(path) - 1] = '\0';
   setup_debug_support(table, image_base, virtual_size, path);
+  setup_debug_support(table, image_base, virtual_size, path, &root);
 
   constexpr size_t kStackSize = 1 * 1024ul * 1024;
   auto stack = reinterpret_cast<char *>(alloc_page(kStackSize, 23));
@@ -221,7 +225,7 @@ int load_sections_and_execute(ImageReader *reader,
   };
   printf("Calling kernel with stack [%p, %p]\n", stack, stack + kStackSize - 1);
   int ret = static_cast<int>(
-      call_with_stack(stack + kStackSize, entry, image_base, &table));
+      call_with_stack(stack + kStackSize, entry, root, &table));
 
   teardown_debug_support(image_base);
 

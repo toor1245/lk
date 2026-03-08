@@ -29,6 +29,7 @@
 #include <uefi/protocols/gbl_efi_image_loading_protocol.h>
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
 #include <uefi/protocols/loaded_image_protocol.h>
+#include <uefi/protocols/unicode_collation_protocol.h>
 #include <uefi/types.h>
 #include <stdarg.h>
 
@@ -82,8 +83,8 @@ EfiHandleInternal *search_handle_internal(EfiHandle handle) {
 }
 
 EfiStatus search_protocol(EfiHandleInternal *handle,
-		          const EfiGuid *protocol,
-			  EfiProtocolInterface **protocol_intf) {
+                          const EfiGuid *protocol,
+                          EfiProtocolInterface **protocol_intf) {
   if (handle == nullptr) {
     printf("%s(EFI_STATUS_INVALID_PARAMETER) internal handle is null\n",
 	   __FUNCTION__);
@@ -109,34 +110,33 @@ EfiStatus search_protocol(EfiHandleInternal *handle,
   return EFI_STATUS_NOT_FOUND;
 }
 
-EfiStatus handle_protocol(EfiHandle handle, const EfiGuid *protocol,
+EfiStatus handle_protocol(EfiHandle handle,
+                          const EfiGuid *protocol,
                           void **intf) {
-  if (guid_eq(protocol, LOADED_IMAGE_PROTOCOL_GUID)) {
-    printf("handle_protocol(%p, LOADED_IMAGE_PROTOCOL_GUID, %p);\n", handle,
-           intf);
-    const auto loaded_image = static_cast<EfiLoadedImageProtocol *>(uefi_malloc(sizeof(EfiLoadedImageProtocol)));
-    if (!loaded_image) {
-      return EFI_STATUS_OUT_OF_RESOURCES;
-    }
-    *loaded_image = {};
-    loaded_image->revision = EFI_LOADED_IMAGE_PROTOCOL_REVISION;
-    loaded_image->parent_handle = nullptr;
-    loaded_image->system_table = nullptr;
-    loaded_image->load_options_size = 0;
-    loaded_image->load_options = nullptr;
-    loaded_image->unload = unload;
-    loaded_image->image_base = handle;
+  printf("%s started\n", __FUNCTION__);
 
-    *intf = loaded_image;
-    return EFI_STATUS_SUCCESS;
-  } else if (guid_eq(protocol, LINUX_EFI_LOADED_IMAGE_FIXED_GUID)) {
-    printf("handle_protocol(%p, LINUX_EFI_LOADED_IMAGE_FIXED_GUID, %p);\n",
-           handle, intf);
-    return EFI_STATUS_UNSUPPORTED;
-  } else {
-    printf("handle_protocol(%p, %p, %p);\n", handle, protocol, intf);
+  if (!handle || !protocol || !intf) {
+    return EFI_STATUS_INVALID_PARAMETER;
   }
-  return EFI_STATUS_UNSUPPORTED;
+
+  EfiHandleInternal *h = search_handle_internal(handle);
+  if (!h) {
+    printf("%s: invalid handle %p\n", __FUNCTION__, handle);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+
+  EfiProtocolInterface *p = nullptr;
+  EfiStatus status = search_protocol(h, protocol, &p);
+  if (status != EFI_STATUS_SUCCESS) {
+    printf("%s: unsupported protocol 0x%x 0x%x 0x%x 0x%llx\n",
+           __FUNCTION__, protocol->data1, protocol->data2, protocol->data3, *(uint64_t *)&protocol->data4);
+    return EFI_STATUS_UNSUPPORTED;
+  }
+
+  *intf = p->interface;
+
+  printf("%s: returning interface %p\n", __FUNCTION__, *intf);
+  return EFI_STATUS_SUCCESS;
 }
 
 EfiStatus register_protocol_notify(const EfiGuid *protocol, EfiEvent event,
@@ -170,12 +170,14 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
     list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
       if (search_protocol(h, protocol, nullptr) == EFI_STATUS_SUCCESS) {
         size += sizeof(EfiHandle);
+        printf("%s Add to locate_handle buffer: 0x%x 0x%x 0x%x 0x%llx\n",
+          __FUNCTION__, protocol->data1, protocol->data2, protocol->data3, *(uint64_t *)&protocol->data4);
       }
     }
 
     if (size == 0) {
-      printf("%s(EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) size is 0, no handles for protocol\n",
-             __FUNCTION__);
+      printf("%s(EFI_LOCATE_HANDLE_SEARCH_TYPE_BY_PROTOCOL) size is 0, no handles for protocol with GUID 0x%x 0x%x 0x%x 0x%llx\n",
+             __FUNCTION__, protocol->data1, protocol->data2, protocol->data3, *(uint64_t *)&protocol->data4);
       return EFI_STATUS_NOT_FOUND;
     }
 
@@ -199,12 +201,14 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
         *buf++ = h;
       }
     }
+
+    return EFI_STATUS_SUCCESS;
   } else {
     printf("%s: Unknown search_type %d\n", __FUNCTION__, search_type);
     return EFI_STATUS_INVALID_PARAMETER;
   }
 
-  return EFI_STATUS_UNSUPPORTED;
+  return EFI_STATUS_SUCCESS;
 }
 
 EfiStatus locate_protocol(const EfiGuid *protocol, void *registration,
@@ -509,7 +513,7 @@ EfiStatus create_handle(EfiHandle *handle) {
 
 EfiStatus add_protocol(EfiHandle handle,
                        const EfiGuid *protocol,
-		       void *intf) {
+                       void *intf) {
   EfiStatus status;
 
   if (handle == nullptr) {
@@ -553,6 +557,10 @@ EfiStatus add_protocol(EfiHandle handle,
   protocol_intf->interface = intf;
   list_initialize(&protocol_intf->open_intfs);
   list_add_tail(&h->protocols, &protocol_intf->link);
+
+  printf("%s GUID: 0x%x 0x%x 0x%x 0x%llx\n",
+         __FUNCTION__,
+         protocol_intf->guid.data1, protocol_intf->guid.data2, protocol_intf->guid.data3, *(uint64_t *)&protocol_intf->guid.data4);
   
   return EFI_STATUS_SUCCESS;
 }
@@ -581,7 +589,7 @@ EfiStatus install_protocol_interface(EfiHandle* handle,
 }
 
 EfiStatus install_multiple_protocol_interfaces_int(EfiHandle* handle,
-		                                   va_list ap) {
+                                                   va_list ap) {
   const EfiGuid *protocol;
   void *protocol_interface;
   EfiStatus ret = EFI_STATUS_SUCCESS;
@@ -594,7 +602,7 @@ EfiStatus install_multiple_protocol_interfaces_int(EfiHandle* handle,
 
   for (;;) {
     protocol = va_arg(ap, EfiGuid*);
-    if (protocol == nullptr) {
+    if (!protocol) {
       break;
     }
     

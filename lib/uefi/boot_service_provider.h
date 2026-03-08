@@ -134,11 +134,23 @@ static constexpr auto EFI_ERASE_BLOCK_PROTOCOL_GUID =
             0x4926,
             {0xaa, 0xef, 0x99, 0x18, 0xe7, 0x72, 0xd9, 0x87}};
 
+static constexpr auto EFI_UNICODE_COLLATION_PROTOCOL_GUID =
+    EfiGuid{0x1d85cd7f,
+            0xf43d,
+            0x11d2,
+            {0x9a, 0xc, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d}};
+
 static constexpr auto EFI_UNICODE_COLLATION_PROTOCOL2_GUID =
     EfiGuid{0xa4c751fc,
             0x23ae,
             0x4c3e,
             {0x92, 0xe9, 0x49, 0x64, 0xcf, 0x63, 0xf3, 0x49}};
+
+static constexpr auto EFI_LOADED_IMAGE_PROTOCOL_GUID =
+    EfiGuid{0x5B1B31A1,
+            0x9562,
+            0x11d2,
+            {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
 
 // This function would be called from GBL before jumping into android kernel
 // LK provides a default no-op implementation that is weakly linked,

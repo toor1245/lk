@@ -29,6 +29,6 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/debug_support.cpp \
 	$(LOCAL_DIR)/charset.cpp \
 	$(LOCAL_DIR)/variable_mem.cpp \
-
+	$(LOCAL_DIR)/unicode_collation.cpp \
 
 include make/module.mk

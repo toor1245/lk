@@ -23,10 +23,13 @@
 #include <uefi/boot_service.h>
 #include <uefi/protocols/device_path_protocol.h>
 #include <uefi/protocols/loaded_image_protocol.h>
+#include <uefi/protocols/unicode_collation_protocol.h>
 #include <uefi/types.h>
 
 #include "charset.h"
 #include "uefi_platform.h"
+#include "boot_service_provider.h"
+#include "unicode_collation.h"
 
 struct EFI_DEVICE_PATH_FILE_PATH_PROTOCOL {
   EfiDevicePathProtocol dp;
@@ -198,7 +201,8 @@ void efi_core_remove_debug_image_info_entry(EfiHandle image_handle)
 EfiStatus setup_debug_support(EfiSystemTable &table,
 			      char *image_base,
 			      size_t virtual_size,
-			      const char *dev_name) {
+			      const char *dev_name,
+            EfiHandle *image_handle) {
   EfiLoadedImageProtocol *efiLoadedImageProtocol = nullptr;
 
   allocate_pool(EFI_MEMORY_TYPE_BOOT_SERVICES_DATA,
@@ -232,9 +236,23 @@ EfiStatus setup_debug_support(EfiSystemTable &table,
   dp_end->length[0] = sizeof(EfiDevicePathProtocol) % 256;
   dp_end->length[1] = sizeof(EfiDevicePathProtocol) / 256;
   efiLoadedImageProtocol->file_path = reinterpret_cast<EfiDevicePathProtocol *>(device_buf);
+
+  table.boot_services->install_multiple_protocol_interfaces(
+    image_handle,
+    &EFI_LOADED_IMAGE_PROTOCOL_GUID,
+    efiLoadedImageProtocol,
+    &EFI_DEVICE_PATH_PROTOCOL_GUID,
+    device_buf,
+    &EFI_UNICODE_COLLATION_PROTOCOL2_GUID,
+    &unicodeCollationProtocol,
+    &EFI_UNICODE_COLLATION_PROTOCOL_GUID,
+    &unicodeCollationProtocol,
+    nullptr
+  );
+
   return efi_core_new_debug_image_info_entry(EFI_DEBUG_IMAGE_INFO_TYPE_NORMAL,
 					     efiLoadedImageProtocol,
-					     image_base);
+					     *image_handle);
 }
 
 void teardown_debug_support(char *image_base) {

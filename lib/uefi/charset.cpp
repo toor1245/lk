@@ -17,6 +17,8 @@
 
 #include "charset.h"
 
+#include "capitalization.h"
+
 size_t utf16_strlen(const char16_t *str) {
   size_t len = 0;
 
@@ -70,4 +72,56 @@ int utf16_to_utf8(char *dest, const char16_t *src, size_t size) {
 
   dest[i] = 0;
   return 0;
+}
+
+/**
+ * @brief convert utf string to uppercase
+ *
+ * This function converts utf string to uppercase. However
+ * it only supports us-ascii right now.
+ */
+int utf_to_upper(int code) {
+  struct capitalization_table *pos = cap_table;
+	int ret = code;
+
+  if (code <= 0x7f) {
+    if (code >= 'a' && code <= 'z')
+      ret -= 0x20;
+    return ret;
+  }
+
+  for (; pos->lower; ++pos) {
+    if (pos->lower == code) {
+      ret = pos->upper;
+      break;
+    }
+  }
+
+	return ret;
+}
+
+/**
+ * @brief convert utf string to lowercase
+ *
+ * This function converts utf string to lowercase. However
+ * it only supports us-ascii right now.
+ */
+int utf_to_lower(int code) {
+  struct capitalization_table *pos = cap_table;
+	int ret = code;
+
+  if (code <= 0x7f) {
+    if (code >= 'A' && code <= 'Z')
+      ret += 0x20;
+    return ret;
+  }
+
+  for (; pos->upper; ++pos) {
+    if (pos->upper == code) {
+      ret = pos->lower;
+      break;
+    }
+  }
+
+	return ret;
 }
