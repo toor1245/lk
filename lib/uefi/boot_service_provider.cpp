@@ -110,6 +110,8 @@ EfiStatus handle_protocol(EfiHandle handle,
     return EFI_STATUS_INVALID_PARAMETER;
   }
 
+  EFI_LOG("%s\n", guid_to_string(protocol));
+
   EfiHandleInternal *h = search_handle_internal(handle);
   if (!h) {
     EFI_LOG("Invalid handle %p\n", handle);
@@ -148,6 +150,8 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
       return EFI_STATUS_INVALID_PARAMETER;
     }
 
+    EFI_LOG("%s\n", guid_to_string(protocol));
+
     size_t size = 0;
     EfiHandleInternal *h;
     list_for_every_entry(&handle_list, h, EfiHandleInternal, link) { 
@@ -168,6 +172,8 @@ EfiStatus locate_handle(EfiLocateHandleSearchType search_type,
 
     if (*buf_size < size) {
       *buf_size = size;
+      EFI_LOG("(%s) Buffer to small %ln, assign buf_size=%ld\n",
+              guid_to_string(protocol), buf_size, size);
       return EFI_STATUS_BUFFER_TOO_SMALL;
     }
 
@@ -282,6 +288,7 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
   } else if (guid_eq(protocol, EFI_BLOCK_IO2_PROTOCOL_GUID)) {
     return open_async_block_device(handle, intf);
   } else if (guid_eq(protocol, EFI_DT_FIXUP_PROTOCOL_GUID)) {
+    EFI_LOG("EFI_DT_FIXUP_PROTOCOL called");
     if (intf != nullptr) {
       EfiDtFixupProtocol *fixup = nullptr;
       allocate_pool(EFI_MEMORY_TYPE_BOOT_SERVICES_DATA, sizeof(EfiDtFixupProtocol),

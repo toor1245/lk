@@ -249,6 +249,8 @@ EfiStatus setup_debug_support(EfiSystemTable &table,
     &unicodeCollationProtocol,
     &EFI_BOOT_MEMORY_PROTOCOL_GUID,
     open_boot_memory_protocol(),
+    &EFI_DT_FIXUP_PROTOCOL_GUID,
+    &dtFixupProtocol,
     nullptr
   );
 
