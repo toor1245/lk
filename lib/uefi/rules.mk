@@ -30,5 +30,6 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/charset.cpp \
 	$(LOCAL_DIR)/variable_mem.cpp \
 	$(LOCAL_DIR)/unicode_collation.cpp \
+	$(LOCAL_DIR)/dt_fixup_protocol.cpp \
 
 include make/module.mk
