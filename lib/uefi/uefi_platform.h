@@ -33,6 +33,8 @@
 EfiStatus efi_dt_fixup(struct EfiDtFixupProtocol* self, void* fdt,
                        size_t* buffer_size, uint32_t flags);
 
+extern const EfiDtFixupProtocol dtFixupProtocol;
+
 EfiStatus fixup_bootconfig(struct GblEfiOsConfigurationProtocol* self,
                            size_t bootconfig_size, const uint8_t* bootconfig,
                            size_t* fixup_buffer_size, uint8_t* fixup);
