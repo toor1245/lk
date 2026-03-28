@@ -15,3 +15,4 @@ int fibo(int argc, const console_cmd_args *argv);
 int mem_test(int argc, const console_cmd_args *argv);
 int port_tests(int argc, const console_cmd_args *argv);
 int thread_tests(int argc, const console_cmd_args *argv);
+int ta_test(int argc, const console_cmd_args *argv);

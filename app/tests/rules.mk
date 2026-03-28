@@ -10,6 +10,7 @@ MODULE_SRCS := \
     $(LOCAL_DIR)/port_tests.c \
     $(LOCAL_DIR)/tests.c \
     $(LOCAL_DIR)/thread_tests.c \
+    $(LOCAL_DIR)/ta_test.c \
 
 MODULE_FLOAT_SRCS := \
     $(LOCAL_DIR)/benchmarks.c \
@@ -18,7 +19,8 @@ MODULE_FLOAT_SRCS := \
 
 MODULE_DEPS += \
     lib/cbuf \
-    lib/libm
+    lib/libm \
+    lib/gpapi
 
 MODULE_COMPILEFLAGS += -fno-builtin
 
