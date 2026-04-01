@@ -8,6 +8,7 @@
 #include <app.h>
 #include <lk/debug.h>
 #include <lib/console.h>
+#include <kernel/thread.h>
 
 static void shell_entry(const struct app_descriptor *app, void *args) {
     console_t *con = console_create(true);
@@ -21,5 +22,7 @@ static void shell_entry(const struct app_descriptor *app, void *args) {
 
 APP_START(shell)
 .entry = shell_entry,
+.flags = APP_FLAG_CUSTOM_STACK_SIZE,
+.stack_size = DEFAULT_STACK_SIZE * 2,
 APP_END
 

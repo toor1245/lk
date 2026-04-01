@@ -12,6 +12,7 @@
 #include <lk/init.h>
 #include <lk/list.h>
 #include <lk/trace.h>
+#include <lk/pow2.h>
 
 #include <lib/bio.h>
 
@@ -25,43 +26,89 @@
 static struct mmc_device mmc;
 static struct list_node mmc_devices;
 
-static void parse_cid(uint32_t resp[4], struct mmc_cid *cid) {
-    cid->mid = (resp[0] >> 24) & 0xFF;
+static void parse_cid(const uint32_t resp[4], struct mmc_cid *cid) {
+    cid->mid = (uint8_t)extract_bit_range128(resp, 127, 120);
 
-    cid->oid[0] = (char)((resp[0] >> 16) & 0xFF);
-    cid->oid[1] = (char)((resp[0] >> 8) & 0xFF);
+    cid->oid[0] = (char)extract_bit_range128(resp, 119, 112);
+    cid->oid[1] = (char)extract_bit_range128(resp, 111, 104);
     cid->oid[2] = '\0';
 
-    cid->pnm[0] = (char)(resp[0] & 0xFF);
-    cid->pnm[1] = (char)((resp[1] >> 24) & 0xFF);
-    cid->pnm[2] = (char)((resp[1] >> 16) & 0xFF);
-    cid->pnm[3] = (char)((resp[1] >> 8) & 0xFF);
-    cid->pnm[4] = (char)(resp[1] & 0xFF);
+    cid->pnm[0] = (char)extract_bit_range128(resp, 103, 96);
+    cid->pnm[1] = (char)extract_bit_range128(resp, 95, 88);
+    cid->pnm[2] = (char)extract_bit_range128(resp, 87, 80);
+    cid->pnm[3] = (char)extract_bit_range128(resp, 79, 72);
+    cid->pnm[4] = (char)extract_bit_range128(resp, 71, 64);
     cid->pnm[5] = '\0';
 
-    uint8_t prv = (resp[2] >> 24) & 0xFF;
+    uint8_t prv = (uint8_t)extract_bit_range128(resp, 63, 56);
     cid->prv_major = (prv >> 4) & 0x0F;
     cid->prv_minor = prv & 0x0F;
 
-    cid->psn = ((resp[3] >> 24) & 0xFF) << 24 | (resp[2] & 0xFFFFFF);
+    cid->psn = extract_bit_range128(resp, 55, 24);
 
-    uint16_t mdt = (resp[3] >> 8) & 0x0FFF;
+    uint16_t mdt = (uint16_t)extract_bit_range128(resp, 19, 8);
+    cid->mdt_y = 2000 + ((mdt >> 4) & 0xFF);  // year = 2000 + high 8 bits
+    cid->mdt_m = mdt & 0x0F;                  // month = low 4 bits
 
-    /* year offset from 2000 */
-    cid->mdt_y = 2000 + ((mdt >> 4) & 0xFF);
-    /* month 1-12 */
-    cid->mdt_m = mdt & 0x0F;
-    cid->crc = (resp[3] >> 1) & 0x7F;
+    cid->crc = (uint8_t)extract_bit_range128(resp, 7, 1);
 }
 
-void trace_cid(const struct mmc_cid *cid) {
-    dprintf(INFO, "Manufacturer ID: 0x%02X\n", cid->mid);
-    dprintf(INFO, "OEM/Application ID: %s\n", cid->oid);
-    dprintf(INFO, "Product Name: %s\n", cid->pnm);
-    dprintf(INFO, "Product Revision: %u.%u\n", cid->prv_major, cid->prv_minor);
-    dprintf(INFO, "Product Serial Number: 0x%08X\n", cid->psn);
-    dprintf(INFO, "Manufacturing Date: %04u-%02u\n", cid->mdt_y, cid->mdt_m);
-    dprintf(INFO, "CRC7 Checksum: 0x%02X\n", cid->crc);
+static void parse_csd(const uint32_t resp[4], struct mmc_csd *csd) {
+    csd->structure = extract_bit_range128(resp, 127, 126);
+    csd->read_blk_ln = extract_bit_range128(resp, 83, 80);
+    csd->c_size_mult = extract_bit_range128(resp, 49, 47);
+
+    switch(csd->structure) {
+        case MMC_CSD_V1:
+	    csd->c_size = extract_bit_range128(resp, 73, 62);
+	    break;
+	case MMC_CSD_V2:
+	    csd->c_size = extract_bit_range128(resp, 69, 48);
+	    break;
+	case MMC_CSD_V3:
+	    csd->c_size = extract_bit_range128(resp, 75, 48);
+	    break;
+    }
+}
+
+static void mmc_set_mem_caps(struct mmc_device *mmc_dev) {
+    struct mmc_csd *csd = &mmc_dev->csd;
+
+    switch(csd->structure) {
+        case MMC_CSD_V1: {
+            size_t mult = valpow2(csd->c_size_mult + 2);
+            size_t blocknr = ((size_t)csd->c_size + 1) * mult;
+            size_t block_len = valpow2(csd->read_blk_ln);
+            mmc_dev->mem_capacity = blocknr * block_len;
+	    mmc_dev->blksize = block_len;
+	    mmc_dev->blkcount = mmc_dev->mem_capacity / mmc_dev->blksize;
+	    break;
+	}
+	case MMC_CSD_V2:
+	case MMC_CSD_V3:
+            mmc_dev->mem_capacity = ((size_t)csd->c_size + 1) * 512 * 1024;
+	    mmc_dev->blksize = 512;
+	    mmc_dev->blkcount = mmc_dev->mem_capacity / mmc_dev->blksize;
+	    break;
+    }
+}
+
+void print_mmc_info(struct mmc_device *mmc_dev) {
+    struct mmc_cid *cid = &mmc_dev->cid;
+    struct mmc_csd *csd = &mmc_dev->csd;
+
+    dprintf(INFO, "\tManufacturer ID: 0x%02X\n", cid->mid);
+    dprintf(INFO, "\tOEM/Application ID: %s\n", cid->oid);
+    dprintf(INFO, "\tProduct Name: %s\n", cid->pnm);
+    dprintf(INFO, "\tProduct Revision: %u.%u\n", cid->prv_major, cid->prv_minor);
+    dprintf(INFO, "\tProduct Serial Number: 0x%08X\n", cid->psn);
+    dprintf(INFO, "\tManufacturing Date: %04u-%02u\n", cid->mdt_y, cid->mdt_m);
+    dprintf(INFO, "\tCRC7 Checksum: 0x%02X\n", cid->crc);
+
+    dprintf(INFO, "\tCSD structure: %d\n", csd->structure);
+    dprintf(INFO, "\tCSD C_SIZE: %d\n", csd->c_size);
+    dprintf(INFO, "\tCSD C_SIZE_MULT: %d\n", csd->c_size_mult);
+    dprintf(INFO, "\tCSD READ_BLK_LEN: %d\n", csd->read_blk_ln);
 }
 
 status_t mmc_go_idle_state(struct mmc_device *mmc_dev) {
@@ -131,9 +178,25 @@ status_t mmc_send_csd(struct mmc_device *mmc_dev) {
         return err;
     }
 
-    mmc_dev->csd.c_size = 0;
-    mmc_dev->csd.read_blk_ln = 0;
-    mmc_dev->csd.structure = 0;
+    parse_csd(cmd.resp, &mmc_dev->csd);
+    mmc_set_mem_caps(mmc_dev); 
+    dprintf(INFO, "SD memory capacity: %lu\n", mmc_dev->mem_capacity);
+
+    return err;
+}
+
+status_t mmc_stop_transmission(struct device *dev) {
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_STOP_TRANSMISSION,
+        .resp_type = MMC_RESP_R48,
+        .arg = 0,
+    };
+
+    status_t err = class_mmc_send_cmd(dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
 
     return err;
 }
@@ -264,8 +327,11 @@ static void mmc_init(uint level) {
     if (err < 0)
         return;
 
-    trace_cid(&mmc.cid);
+    err = mmc_send_csd(&mmc);
+    if (err < 0)
+        return;
 
+    print_mmc_info(&mmc);
     mmc_bdev_init(&mmc);
 }
 

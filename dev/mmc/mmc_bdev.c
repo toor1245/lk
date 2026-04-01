@@ -6,19 +6,20 @@
  * https://opensource.org/licenses/MIT
  */
 
+#include "lk/err.h"
 #include <string.h>
 
 #include <lk/trace.h>
 
 #include <lib/bio.h>
+#include <stdlib.h>
 
 #include <dev/mmc.h>
 #include <dev/class/mmc.h>
 
-#define LOCAL_TRACE 1
-
 ssize_t mmc_bdev_read_block(struct bdev *bdev, void *buf, bnum_t block, uint count) {
     struct mmc_device *dev = containerof(bdev, struct mmc_device, bdev);
+
     struct mmc_xfer_info info = (struct mmc_xfer_info) {
         .buffer = buf,
         .blkcount = count,
@@ -31,6 +32,7 @@ ssize_t mmc_bdev_read_block(struct bdev *bdev, void *buf, bnum_t block, uint cou
 
 ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, uint count) {
     struct mmc_device *dev = containerof(bdev, struct mmc_device, bdev);
+
     struct mmc_xfer_info info = (struct mmc_xfer_info) {
         .buffer = buf,
         .blkcount = count,
@@ -42,11 +44,7 @@ ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, u
 }
 
 status_t mmc_bdev_init(struct mmc_device *mmc_dev) {
-    mmc_dev->blksize = 512;
-    mmc_dev->blkcount = 4096;
-    mmc_dev->capacity = mmc_dev->blksize * mmc_dev->blkcount; // 16MB
-
-    bio_initialize_bdev(&mmc_dev->bdev, "mmc",
+    bio_initialize_bdev(&mmc_dev->bdev, "mmc" /* mmc_dev->dev->name */,
                         mmc_dev->blksize, mmc_dev->blkcount,
                         0, NULL, BIO_FLAGS_NONE);
 
@@ -56,5 +54,5 @@ status_t mmc_bdev_init(struct mmc_device *mmc_dev) {
 
     bio_register_device(&mmc_dev->bdev);
 
-    return 0;
+    return NO_ERROR;
 }

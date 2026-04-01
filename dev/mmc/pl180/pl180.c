@@ -29,9 +29,9 @@
 #define LOCAL_TRACE 1
 
 static inline void delay(lk_time_t delay) {
-    lk_time_t start = current_time();
+//    lk_time_t start = current_time();
 
-    while (start + delay > current_time());
+//    while (start + delay > current_time());
 }
 
 static void trace_cmd_resp(struct mmc_cmd *cmd) {
@@ -65,9 +65,6 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
     uint32_t host_status = 0;
     bool has_resp = (cmd->resp_type == MMC_RESP_R48) || (cmd->resp_type == MMC_RESP_R138);
 
-    LTRACEF("cmd idx: 0x%x\n", cmd->idx);
-    LTRACEF("cmd arg: 0x%x\n", cmd->arg);
-
     write_mci_reg(base, MCI_ARG, cmd->arg);
     delay(300);
 
@@ -80,6 +77,8 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
         LTRACEF("cmd resp width: R138\n");
         mci_cmd |= (1 << 6) | (1 << 7);
     }
+
+    LTRACEF("cmd idx=0x%x, arg=0x%x\n", cmd->idx, cmd->arg);
 
     write_mci_reg(base, MCI_CMD, mci_cmd);
 
@@ -114,10 +113,10 @@ static status_t pl180_send_cmd(struct device *dev, struct mmc_cmd *cmd) {
 
 static ssize_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
     uint32_t status_err_mask = MCI_STAT_DATA_CRC_FAIL | MCI_STAT_DATA_TIME_OUT | MCI_STAT_RX_OVERRUN;
-    char *tmp = dst;
+    uint32_t *tmp = (uint32_t *)dst;
     ssize_t bytes_read = 0;
     ssize_t err = NO_ERROR;
-
+		
     while (xfercount >= sizeof(uint32_t)) {
         uint32_t status = read_mci_reg(base, MCI_STAT);
         uint32_t status_err = status & status_err_mask;
@@ -127,23 +126,26 @@ static ssize_t pl180_read_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
             goto err;
         }
         if (status & MCI_STAT_RX_DATA_AVLBL) {
-            uint32_t reg = read_mci_reg(base, MCI_DFIFO);
-            memcpy(tmp, &reg, sizeof(uint32_t));
-            tmp += sizeof(uint32_t);
+	    *(tmp) = read_mci_reg(base, MCI_DFIFO);
+            tmp++;
             xfercount -= sizeof(uint32_t);
             bytes_read += sizeof(uint32_t);
         }
     }
 
 err:
-    /* return error or bytes read */
+    LTRACEF("bytes_read %ld\n", bytes_read);
     return (err >= 0) ? bytes_read : err;
 }
 
 static ssize_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
     status_t err;
     const struct pl180_config *config = dev->config;
-    uint64_t xfercount = info->blkcount * info->blksize;
+    uint64_t xfercount = (uint64_t)info->blkcount * info->blksize;
+
+    assert(info->blksize == 512);
+    assert(info->blkcount >= 1);
+
     uint32_t shift = log2_uint(info->blksize);
     uint32_t dctrl_reg = (1 << 0) | (1 << 1); // ENABLE + Read
     dctrl_reg |= (shift << 4);
@@ -151,18 +153,29 @@ static ssize_t pl180_read(struct device *dev, struct mmc_xfer_info *info) {
     write_mci_reg(config->base, MCI_DLEN, xfercount);
     write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
 
-    LTRACEF("Read blocks, blkcount=%d, blksize=%d\n",
-	    info->blkcount, info->blksize);
+    LTRACEF("Read blocks, blkcount=0x%x, blksize=0x%x, buffer=%p\n",
+	    info->blkcount, info->blksize, info->buffer);
 
-    if (info->blkcount == 1)
+    if (info->blkcount == 1) {
         err = mmc_read_single_blk(dev, info->block);
-    else
+    } else {
 	err = mmc_read_multiple_blk(dev, info->block);
+    }
 
     if (err < 0)
         return err;
 
-    return pl180_read_fifo(config->base, info->buffer, xfercount);
+    ssize_t bytes_read = pl180_read_fifo(config->base, info->buffer, xfercount);
+
+    if (info->blkcount > 1) {
+        status_t stop_err = mmc_stop_transmission(dev);
+        if (stop_err < 0) {
+            LTRACEF("Failed to stop multi-block read, reason: %d\n", stop_err);
+            return stop_err;
+        }
+    }
+
+    return bytes_read;
 }
 
 static ssize_t pl180_write_fifo(uintptr_t base, char *dst, uint64_t xfercount) {
@@ -207,7 +220,7 @@ err:
 static ssize_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
     status_t err;
     const struct pl180_config *config = dev->config;
-    uint64_t xfercount = info->blkcount * info->blksize;
+    uint64_t xfercount = (uint64_t)info->blkcount * info->blksize;
     uint32_t shift = log2_uint(info->blksize);
     uint32_t dctrl_reg = (1 << 0); // ENABLE + Write
     dctrl_reg |= (shift << 4);
@@ -215,13 +228,15 @@ static ssize_t pl180_write(struct device *dev, struct mmc_xfer_info *info) {
     write_mci_reg(config->base, MCI_DCTRL, dctrl_reg);
     write_mci_reg(config->base, MCI_DLEN, xfercount);
 
-    LTRACEF("Write blocks, blkcount=%d, blksize=%d\n",
+    LTRACEF("Write blocks, blkcount=0x%x, blksize=0x%x\n",
 	    info->blkcount, info->blksize);
 
-    if (info->blkcount == 1)
-        err = mmc_write_single_blk(dev, info->block * 512);
-    else
+    if (info->blkcount == 1) {
+        err = mmc_write_single_blk(dev, info->block);
+    }
+    else {
         err = mmc_write_multiple_blk(dev, info->block);
+    }
 
     if (err < 0)
         return err;

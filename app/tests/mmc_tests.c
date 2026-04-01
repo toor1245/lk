@@ -13,40 +13,41 @@
     printf("[%s:%d] " fmt, __PRETTY_FUNCTION__, __LINE__, ##args)
 #define LOGF(x...) _LOGF(x)
 
+#if WITH_DEV_MMC
 #include <lib/fs.h>
 #include <lib/bio.h>
 
 #define MMC_MOUNT_POINT  "/mmc"
 #define MMC_BDEV_NAME     "mmc"
 
-#define BUF_SIZE	1024
+#define BUF_SIZE 1024
 
-int mmc_tests(int argc, const console_cmd_args *argv) {
+static int mmc_read_test(void) {
     status_t status;
-    filehandle *handle;
     ssize_t readbytes;
-    char *buffer[BUF_SIZE];
+    filehandle *handle;
+    char buf[BUF_SIZE];
 
     status = fs_mount(MMC_MOUNT_POINT, "ext2", MMC_BDEV_NAME);
     if (status != NO_ERROR) {
-      LOGF("failed to mount mmc bdev (%s) onto mount point (%s): %d\n",
-           MMC_BDEV_NAME, MMC_MOUNT_POINT, status);
-      return status;
+        printf("Mount failed: %d\n", status);
+        return status;
     }
 
     status = fs_open_file(MMC_MOUNT_POINT "/test.txt", &handle);
     if (status != NO_ERROR) {
-        LOGF("failed to open the target file: %d\n", status);
+        printf("Open failed: %d\n", status);
+        fs_unmount(MMC_MOUNT_POINT);
         return status;
     }
 
-    readbytes = fs_read_file(handle, buffer, 0, BUF_SIZE);
+    readbytes = fs_read_file(handle, buf, 0, BUF_SIZE);
     if (readbytes < 0) {
         LOGF("failed to read the target file: %ld\n", readbytes);
         return status;
     }
 
-    hexdump8(buffer, BUF_SIZE);
+    hexdump8(buf, BUF_SIZE);
 
     status = fs_close_file(handle);
     if (status != NO_ERROR) {
@@ -56,10 +57,24 @@ int mmc_tests(int argc, const console_cmd_args *argv) {
 
     status = fs_unmount(MMC_MOUNT_POINT);
     if (status != NO_ERROR) {
-      LOGF("failed to unmount mmc on mount point (%s): %d\n",
-           MMC_MOUNT_POINT, status);
-      return status;
+        LOGF("failed to unmount mmc on mount point (%s): %d\n",
+             MMC_MOUNT_POINT, status);
+        return status;
     }
 
     return NO_ERROR;
 }
+
+int mmc_tests(int argc, const console_cmd_args *argv) {
+    status_t status;
+
+    status = mmc_read_test();
+
+    return status;
+}
+#else
+int mmc_tests(int argc, const console_cmd_args *argv) {
+    LOGF("platform didn't have dev/mmc supported\n");
+    return ERR_NOT_SUPPORTED;
+}
+#endif

@@ -12,6 +12,9 @@
 #include <lib/bio.h>
 #include <dev/driver.h>
 
+#include <stdint.h>
+#include <assert.h>
+
 /* SD/MMC commands indexes */
 #define MMC_CMD_GO_IDLE_STATE		(0)
 #define MMC_CMD_SEND_OP_COND		(1)
@@ -58,18 +61,20 @@ enum mmc_csd_structure {
 
 struct mmc_csd {
     enum mmc_csd_structure structure; /* CSD structure, Readable, [127:126] */
-    uint16_t c_size; /* Device size, Readable, [73:62] */
     uint8_t read_blk_ln; /* Max read data block length, Readable, [83:80] */
+    uint32_t c_size; /* Device size, Readable, [73:62] */
+    uint8_t c_size_mult; /* Device size multiplier, Readable, [49:47] */
 };
 
 struct mmc_device {
     struct device *dev;
     bdev_t bdev;
-    uint64_t capacity;
-    uint64_t blksize;
-    bnum_t blkcount;
+    const char *name;
     struct mmc_cid cid;
     struct mmc_csd csd;
+    uint64_t blksize;
+    bnum_t blkcount;
+    size_t mem_capacity;
 };
 
 /* MMC/SD card commands */
@@ -77,6 +82,7 @@ status_t mmc_go_idle_state(struct mmc_device *mmc_dev);
 status_t mmc_all_send_cid(struct mmc_device *mmc_dev);
 status_t mmc_send_op_cond(struct mmc_device *mmc_dev);
 status_t mmc_send_csd(struct mmc_device *mmc_dev);
+status_t mmc_stop_transmission(struct device *mmc_dev);
 status_t mmc_read_single_blk(struct device *mmc_dev, uint32_t block);
 status_t mmc_read_multiple_blk(struct device *mmc_dev, uint32_t block);
 status_t mmc_write_single_blk(struct device *mmc_dev, uint32_t block);
@@ -84,3 +90,51 @@ status_t mmc_write_multiple_blk(struct device *mmc_dev, uint32_t block);
 
 /* SD card specific commands */
 status_t sd_set_app_cmd(struct mmc_device *mmc_dev);
+
+/**
+ * Extract a bit range from a 128-bit MMC/SD register (CID/CSD/other)
+ * represented as 4x32-bit words.
+ *
+ * resp[0] = bits 127..96 (MSB word)
+ * resp[1] = bits 95..64
+ * resp[2] = bits 63..32
+ * resp[3] = bits 31..0  (LSB word)
+ *
+ * @param resp  Pointer to 4x32-bit words (big-endian style)
+ * @param msb   Most significant bit of field (0..127)
+ * @param lsb   Least significant bit of field (0..127)
+ * @return      Extracted value as uint32_t (max 32 bits)
+ */
+static inline uint32_t extract_bit_range128(const uint32_t resp[4],
+    uint32_t msb, uint32_t lsb)
+{
+    assert(msb < 128);
+    assert(lsb < 128);
+    assert(msb >= lsb);
+
+    // Width of the field
+    uint32_t width = msb - lsb + 1;
+    assert(width <= 32);
+
+    // Word indices (resp[0] = bits 127..96)
+    uint32_t w_msb = 3 - (msb >> 5);
+    uint32_t w_lsb = 3 - (lsb >> 5);
+
+    // Bit positions in their words
+    uint32_t b_msb = msb & 31;
+    uint32_t b_lsb = lsb & 31;
+
+    uint32_t result;
+
+    if (w_msb == w_lsb) {
+        // Field fits in a single word
+        result = (resp[w_msb] >> (b_lsb)) & ((1U << width) - 1U);
+    } else {
+        // Field spans two words
+        uint32_t upper = resp[w_msb] & ((1U << (b_msb + 1U)) - 1U);
+        uint32_t lower = resp[w_lsb] >> b_lsb;
+        result = (upper << (width - (b_msb + 1U))) | lower;
+    }
+
+    return result;
+}
