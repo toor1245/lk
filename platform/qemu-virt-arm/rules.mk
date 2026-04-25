@@ -34,9 +34,11 @@ MODULE_DEPS += \
     dev/virtio/block \
     dev/virtio/gpu \
     dev/virtio/net \
+    dev/mmc/sdhci \
     lib/cbuf \
     lib/fdtwalk \
     lib/fs/9p \
+    lib/gpapi \
 
 ifeq ($(call TOBOOL,$(USE_RUST)),true)
 MODULE_DEPS += lib/rust_support

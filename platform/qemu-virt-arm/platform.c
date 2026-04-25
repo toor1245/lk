@@ -24,6 +24,8 @@
 #include <platform.h>
 #include <platform/gic.h>
 #include <platform/interrupts.h>
+#include <dev/mmc.h>
+#include <dev/mmc/sdhci.h>
 
 #if WITH_LIB_MINIP
 #include <lib/minip.h>
@@ -35,7 +37,7 @@
 #include <rust/dev-pl011.h>
 #endif
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 #define DEFAULT_MEMORY_SIZE (MEMSIZE) /* try to fetch from the emulator via the fdt */
 
@@ -68,6 +70,8 @@ const void *fdt = (void *)KERNEL_BASE;
 const void *get_fdt(void) {
     return fdt;
 }
+
+struct sdhci_host *sdhci_host = NULL;
 
 void platform_early_init(void) {
     const struct pl011_config uart_config = {
@@ -147,6 +151,13 @@ void platform_init(void) {
         minip_start_dhcp();
     }
 #endif
+
+    struct mmc_host *host = NULL;
+    if (mmc_sdhci_create(&host) != NO_ERROR) {
+        panic("failed to initialize SDHCI\n");
+    }
+
+    mmc_init(host);
 }
 
 status_t platform_pci_int_to_vector(unsigned int pci_int, unsigned int pci_bus,
