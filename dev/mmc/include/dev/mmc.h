@@ -23,9 +23,11 @@
 #define MMC_CMD_SEND_EXT_CSD	(8)
 #define MMC_CMD_SEND_CSD		(9)
 #define MMC_CMD_STOP_TRANSMISSION	(12)
+#define MMC_CMD_SEND_STATUS         (13)
 #define MMC_CMD_SET_BLOCKLEN		(16)
 #define MMC_CMD_READ_SINGLE_BLK		(17)
 #define MMC_CMD_READ_MULTIPLE_BLK	(18)
+#define MMC_CMD_SET_BLOCK_COUNT		(23)
 #define MMC_CMD_WRITE_SINGLE_BLK	(24)
 #define MMC_CMD_WRITE_MULTIPLE_BLK	(25)
 
@@ -33,7 +35,9 @@
 #define SD_CMD_SEND_OP_COND	(41)
 #define SD_APP_CMD		(55)
 
-#define CARD_STATUS_ACMD    (1 << 5)
+#define CARD_STATUS_ACMD                (1 << 5)
+#define CARD_STATUS_READY_FOR_DATA      (1 << 8)
+#define MMC_CURRENT_STATE()
 
 /* Card registers mask */
 #define OCR_VOLTAGE_MASK    (0x00FFFF80)
@@ -81,6 +85,7 @@ struct mmc_device {
     uint64_t blksize;
     bnum_t blkcount;
     size_t mem_capacity;
+    uint16_t rca;
 };
 
 enum mmc_resp {
@@ -101,9 +106,9 @@ struct mmc_cmd {
 /* MMC/SD data transfer info */
 struct mmc_xfer_info {
     char *buffer;
-    uint32_t blkcount;
-    uint32_t blksize;
-    uint32_t block;
+    uint64_t blkcount;
+    uint64_t blksize;
+    uint64_t block;
 };
 
 struct mmc_host;
@@ -133,6 +138,7 @@ status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, uint8_t *buffer);
 status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp);
 status_t mmc_read_single_blk(struct mmc_device *mmc_dev, uint32_t block);
 status_t mmc_read_multiple_blk(struct mmc_device *mmc_dev, uint32_t block);
+status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_count);
 status_t mmc_write_single_blk(struct mmc_device *mmc_dev, uint32_t block);
 status_t mmc_write_multiple_blk(struct mmc_device *mmc_dev, uint32_t block);
 status_t mmc_stop_transmission(struct mmc_device *mmc_dev);
@@ -186,6 +192,14 @@ static inline uint32_t extract_bit_range128(const uint32_t resp[4],
     }
 
     return result;
+}
+
+static inline uint64_t extract_bit_range(uint32_t reg, uint32_t msb,
+                                       uint32_t lsb) {
+  const uint64_t bits = msb - lsb + 1ULL;
+  const uint64_t mask = (1ULL << bits) - 1ULL;
+  assert(msb >= lsb);
+  return (reg >> lsb) & mask;
 }
 
 static inline uint64_t extract_byte_range512(char *buffer, uint32_t offset, uint32_t len)

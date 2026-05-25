@@ -44,6 +44,9 @@ ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, u
 }
 
 void mmc_bdev_init(struct mmc_device *mmc_dev) {
+    printf("MMC: Initializing block device for %s\n", mmc_dev->name);
+    printf("MMC dev: blksize=%zu, blkcount=%zu\n", mmc_dev->blksize, mmc_dev->blkcount);
+
     bio_initialize_bdev(&mmc_dev->bdev, mmc_dev->name,
                         mmc_dev->blksize, mmc_dev->blkcount,
                         0, NULL, BIO_FLAGS_NONE);

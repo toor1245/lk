@@ -20,10 +20,9 @@
 
 #include <lib/bio.h>
 
-#include <lib/bio.h>
-
 #include <dev/mmc.h>
 #include <dev/mmc_bdev.h>
+#include <dev/rpmb.h>
 
 #define LOCAL_TRACE 1
 
@@ -146,6 +145,7 @@ static status_t mmc_set_mem_caps(struct mmc_device *mmc_dev) {
 
         parse_ext_csd((char *)ext_csd_buf, &mmc_dev->ext_csd);
         mmc_dev->mem_capacity = mmc_dev->ext_csd.sec_count * mmc_dev->blksize;
+        mmc_dev->blkcount = mmc_dev->mem_capacity / mmc_dev->blksize;
 
         free(ext_csd_buf);
         break;
@@ -195,6 +195,7 @@ status_t mmc_go_idle_state(struct mmc_device *mmc_dev) {
         .idx = MMC_CMD_GO_IDLE_STATE,
         .resp_type = MMC_RESP_NONE,
         .arg = 0,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -210,7 +211,8 @@ status_t mmc_all_send_cid(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_ALL_SEND_CID,
         .resp_type = MMC_RESP_R138,
-        .arg = 1 << 0x10
+        .arg = 1 << 0x10,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -228,7 +230,8 @@ status_t mmc_set_relative_addr(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SET_RELATIVE_ADDR,
         .resp_type = MMC_RESP_R48,
-        .arg = 1 << 0x10
+        .arg = 1 << 0x10,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -245,6 +248,7 @@ status_t mmc_send_op_cond(struct mmc_device *mmc_dev) {
         .idx = MMC_CMD_SEND_OP_COND,
         .resp_type = MMC_RESP_R48,
         .arg = 0x40300000,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -265,6 +269,7 @@ status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
         .idx = MMC_CMD_SEND_CSD,
         .resp_type = MMC_RESP_R138,
         .arg = 1 << 0x10,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -279,20 +284,7 @@ status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
 }
 
 status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, uint8_t *buffer) {
-    struct mmc_cmd cmd = (struct mmc_cmd) {
-        .idx = MMC_CMD_SEND_EXT_CSD,
-        .resp_type = MMC_RESP_R48,
-        .arg = 0,
-        .has_data = true,
-    };
-
-    status_t err = mmc_dev->host->ops->get_ext_csd(mmc_dev, buffer);
-    if (err < 0) {
-        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
-        return err;
-    }
-
-    return err;
+    return mmc_dev->host->ops->get_ext_csd(mmc_dev, buffer);
 }
 
 status_t mmc_stop_transmission(struct mmc_device *mmc_dev) {
@@ -300,6 +292,24 @@ status_t mmc_stop_transmission(struct mmc_device *mmc_dev) {
         .idx = MMC_CMD_STOP_TRANSMISSION,
         .resp_type = MMC_RESP_R48,
         .arg = 0,
+        .has_data = false
+    };
+
+    status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
+
+    return err;
+}
+
+status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_count) {
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_SET_BLOCK_COUNT,
+        .resp_type = MMC_RESP_R48,
+        .arg = block_count,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -316,6 +326,7 @@ status_t mmc_read_single_blk(struct mmc_device *mmc_dev, uint32_t block) {
         .idx = MMC_CMD_READ_SINGLE_BLK,
         .resp_type = MMC_RESP_R48,
         .arg = block,
+        .has_data = true,
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -332,6 +343,7 @@ status_t mmc_read_multiple_blk(struct mmc_device *mmc_dev, uint32_t block) {
         .idx = MMC_CMD_READ_MULTIPLE_BLK,
         .resp_type = MMC_RESP_R48,
         .arg = block,
+        .has_data = true,
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -348,6 +360,7 @@ status_t mmc_write_single_blk(struct mmc_device *mmc_dev, uint32_t block) {
         .idx = MMC_CMD_WRITE_SINGLE_BLK,
         .resp_type = MMC_RESP_R48,
         .arg = block,
+        .has_data = true,
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -364,7 +377,9 @@ status_t mmc_write_multiple_blk(struct mmc_device *mmc_dev, uint32_t block) {
         .idx = MMC_CMD_WRITE_MULTIPLE_BLK,
         .resp_type = MMC_RESP_R48,
         .arg = block,
+        .has_data = true,
     };
+
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
     if (err < 0) {
         LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
@@ -379,6 +394,7 @@ status_t sd_set_app_cmd(struct mmc_device *mmc_dev) {
         .idx = SD_APP_CMD,
         .resp_type = MMC_RESP_R48,
         .arg = 0,
+        .has_data = false
     };
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
@@ -394,11 +410,52 @@ status_t sd_set_app_cmd(struct mmc_device *mmc_dev) {
     return err;
 }
 
+static int mmc_get_state(struct mmc_device *mmc_dev) {
+    struct mmc_cmd cmd;
+
+    do {
+        memset(&cmd, 0, sizeof(struct mmc_cmd));
+        cmd.idx = MMC_CMD_SEND_STATUS;
+        cmd.arg = 1 << 0x10;
+        cmd.resp_type = MMC_RESP_R48;
+        cmd.has_data = false;
+
+        status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+        if (err < 0) {
+            LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+            return err;
+        }
+    } while ((cmd.resp[0] & CARD_STATUS_READY_FOR_DATA) == 0);
+
+    /* Get Card status CURRENT_STATE */
+    return extract_bit_range(cmd.resp[0], 12, 9);
+}
+
+static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const uint8_t *req, 
+                                      uint32_t req_len, uint8_t *resp, uint32_t resp_len) {
+    struct mmc_device *mmc_dev = (struct mmc_device *)rdev->priv;
+
+    mmc_dev->host->ops->send_cmd(mmc_dev, &(struct mmc_cmd) {
+        .idx = MMC_CMD_SWITCH,
+        .resp_type = MMC_RESP_R48,
+        .arg = (0x03 << 24) | (0x01 << 8) | 0x01,
+        .has_data = false,
+    });
+    
+    // 1. Switch to RPMB partition (CMD6)
+    // 2. Set block count and reliable write flags (CMD23)
+    // 3. Write requests (CMD25)
+    // 4. Read response if requested (CMD25 + CMD18)
+    // 5. Switch back to user partition (CMD6)
+    
+    return NO_ERROR;
+}
+
 status_t mmc_init(struct mmc_host *host) {
     status_t err;
 
     mmc.host = host;
-    mmc.name = "mmc";
+    mmc.name = "mmc0";
 
     err = mmc.host->ops->init(&mmc);
     if (err < 0)

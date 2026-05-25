@@ -34,6 +34,10 @@ static inline __ALWAYS_INLINE uint divpow2(uint val, uint divp2) {
     return val >> divp2;
 }
 
+static inline __ALWAYS_INLINE uint64_t divpow2_64(uint64_t val, uint64_t divp2) {
+    return val >> divp2;
+}
+
 static inline __ALWAYS_INLINE uint modpow2(uint val, uint modp2) {
     return val & ((1UL << modp2) - 1);
 }

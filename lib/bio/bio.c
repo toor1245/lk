@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 static struct {
     struct list_node list;
@@ -38,9 +38,9 @@ static ssize_t bio_default_read(struct bdev *dev, void *_buf, off_t offset, size
     STACKBUF_DMA_ALIGN(temp, dev->block_size); // temporary buffer for partial block transfers
 
     /* find the starting block */
-    block = divpow2(offset, dev->block_shift);
+    block = divpow2_64(offset, dev->block_shift);
 
-    LTRACEF("buf %p, offset %lld, block %u, len %zd\n", buf, offset, block, len);
+    LTRACEF("buf %p, offset %lld, block %llu, len %zd\n", buf, offset, block, len);
     /* handle partial first block */
     if ((offset % dev->block_size) != 0) {
         /* read in the block */
@@ -64,7 +64,7 @@ static ssize_t bio_default_read(struct bdev *dev, void *_buf, off_t offset, size
         block++;
     }
 
-    LTRACEF("buf %p, block %u, len %zd\n", buf, block, len);
+    LTRACEF("buf %p, block %llu, len %zd\n", buf, block, len);
 
     // If the device requires alignment AND our buffer is not alread aligned.
     bool requires_alignment =
@@ -89,7 +89,7 @@ static ssize_t bio_default_read(struct bdev *dev, void *_buf, off_t offset, size
             block++;
         }
     } else {
-        uint32_t num_blocks = divpow2(len, dev->block_shift);
+        uint64_t num_blocks = divpow2_64(len, dev->block_shift);
         err = bio_read_block(dev, buf, block, num_blocks);
         if (err < 0) {
             goto err;
@@ -103,7 +103,7 @@ static ssize_t bio_default_read(struct bdev *dev, void *_buf, off_t offset, size
         block += num_blocks;
     }
 
-    LTRACEF("buf %p, block %u, len %zd\n", buf, block, len);
+    LTRACEF("buf %p, block %llu, len %zd\n", buf, block, len);
     /* handle partial last block */
     if (len > 0) {
         /* read the block */
