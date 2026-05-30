@@ -17,6 +17,7 @@
 #include <lk/trace.h>
 #include <lk/pow2.h>
 #include <lk/err.h>
+#include <lk/list.h>
 
 #include <lib/bio.h>
 
@@ -26,7 +27,9 @@
 
 #define LOCAL_TRACE 1
 
-static struct mmc_device mmc;
+static struct list_node mmc_devices = LIST_INITIAL_VALUE(mmc_devices);
+static uint32_t dev_num = 0;
+static uint32_t dev_rca = 1;
 
 static void parse_cid(const uint32_t resp[4], struct mmc_cid *cid) {
     cid->mid = (uint8_t)extract_bit_range128(resp, 127, 120);
@@ -176,7 +179,7 @@ static status_t mmc_set_mem_caps(struct mmc_device *mmc_dev) {
             return ERR_NO_MEMORY;
         }
 
-        err = mmc_select_card(&mmc);
+        err = mmc_select_card(mmc_dev);
         if (err < 0)
             return err;
 
@@ -394,35 +397,53 @@ static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const uint8_t *req,
     return NO_ERROR;
 }
 
-status_t mmc_init(struct mmc_host *host) {
+status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev) {
     status_t err;
 
-    mmc.host = host;
-    mmc.name = "mmc0";
+    struct mmc_device *mmc_dev = calloc(1, sizeof(struct mmc_device));
+    if (!mmc_dev)
+        return ERR_NO_MEMORY;
 
-    err = mmc.host->ops->init(&mmc);
+    mmc_dev->host = host;
+    mmc_dev->rca = dev_rca;
+
+    char dev_blockname[32];
+    err = snprintf(dev_blockname, sizeof(dev_blockname), "mmc%u", dev_num);
     if (err < 0)
         return err;
 
-    err = mmc_go_idle_state(&mmc);
+    mmc_dev->name = strdup(dev_blockname);
+    if (!mmc_dev->name)
+        return ERR_NO_MEMORY;
+
+    err = mmc_dev->host->ops->init(mmc_dev);
     if (err < 0)
         return err;
 
-    err = mmc_send_op_cond(&mmc);
+    err = mmc_go_idle_state(mmc_dev);
     if (err < 0)
         return err;
 
-    err = mmc_all_send_cid(&mmc);
+    err = mmc_send_op_cond(mmc_dev);
     if (err < 0)
         return err;
 
-    err = mmc_set_relative_addr(&mmc);
+    err = mmc_all_send_cid(mmc_dev);
     if (err < 0)
         return err;
 
-    mmc_set_mem_caps(&mmc); 
-    print_mmc_info(&mmc);
-    mmc_bdev_init(&mmc);
+    err = mmc_set_relative_addr(mmc_dev);
+    if (err < 0)
+        return err;
+
+    mmc_set_mem_caps(mmc_dev); 
+    print_mmc_info(mmc_dev);
+
+    *out_dev = mmc_dev;
+
+    list_add_tail(&mmc_devices, &mmc_dev->list_node);
+    dev_num++;
+    dev_rca++;
 
     return NO_ERROR;
 }

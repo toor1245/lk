@@ -12,6 +12,8 @@
 #include <lib/bio.h>
 #include <stdint.h>
 
+#include <lk/list.h>
+
 /* SD/MMC commands indexes */
 #define MMC_CMD_GO_IDLE_STATE		(0)
 #define MMC_CMD_SEND_OP_COND		(1)
@@ -76,6 +78,7 @@ struct mmc_ext_csd {
 };
 
 struct mmc_device {
+    struct list_node list_node;
     struct mmc_host *host;
     bdev_t bdev;
     const char *name;
@@ -128,7 +131,7 @@ struct mmc_host {
 };
 
 /* MMC/SD API */
-status_t mmc_init(struct mmc_host *host);
+status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev);
 ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
                         uint64_t block, uint64_t blkcount);
 

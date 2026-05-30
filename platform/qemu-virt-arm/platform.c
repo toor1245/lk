@@ -25,6 +25,7 @@
 #include <platform/gic.h>
 #include <platform/interrupts.h>
 #include <dev/mmc.h>
+#include <dev/mmc_bdev.h>
 #include <dev/mmc/sdhci.h>
 
 #if WITH_LIB_MINIP
@@ -157,7 +158,13 @@ void platform_init(void) {
         panic("failed to initialize SDHCI\n");
     }
 
-    mmc_init(host);
+    struct mmc_device *mmc_dev = NULL;
+    err = mmc_init(host, &mmc_dev);
+    if (err != NO_ERROR) {
+        panic("failed to initialize MMC device, err=%d\n", err);
+    }
+
+    mmc_bdev_init(mmc_dev);
 }
 
 status_t platform_pci_int_to_vector(unsigned int pci_int, unsigned int pci_bus,
