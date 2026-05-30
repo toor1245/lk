@@ -84,6 +84,33 @@ static void parse_ext_csd(char *buffer, struct mmc_ext_csd *ext_csd) {
     ext_csd->sec_count = extract_byte_range512(buffer, 212, 4);
 }
 
+static void print_mmc_info(struct mmc_device *mmc_dev) {
+    struct mmc_cid *cid = &mmc_dev->cid;
+    struct mmc_csd *csd = &mmc_dev->csd;
+    struct mmc_ext_csd *ext_csd = &mmc_dev->ext_csd;
+
+    dprintf(INFO, "CID Register\n");
+    dprintf(INFO, "\tManufacturer ID: 0x%02X\n", cid->mid);
+    dprintf(INFO, "\tOEM/Application ID: %s\n", cid->oid);
+    dprintf(INFO, "\tProduct Name: %s\n", cid->pnm);
+    dprintf(INFO, "\tProduct Revision: %u.%u\n", cid->prv_major, cid->prv_minor);
+    dprintf(INFO, "\tProduct Serial Number: 0x%08X\n", cid->psn);
+    dprintf(INFO, "\tManufacturing Date: %04u-%02u\n", cid->mdt_y, cid->mdt_m);
+    dprintf(INFO, "\tCRC7 Checksum: 0x%02X\n", cid->crc);
+
+    dprintf(INFO, "\nCSD Register\n");
+    dprintf(INFO, "\tCSD structure: %d\n", csd->structure);
+    dprintf(INFO, "\tCSD C_SIZE: %d\n", csd->c_size);
+    dprintf(INFO, "\tCSD C_SIZE_MULT: %d\n", csd->c_size_mult);
+    dprintf(INFO, "\tCSD READ_BLK_LEN: %d\n", csd->read_blk_ln);
+
+    dprintf(INFO, "\nExtended CSD register:\n");
+    dprintf(INFO, "\tCSD structure version %x\n", ext_csd->structure);
+    dprintf(INFO, "\tSector count %x\n", ext_csd->sec_count);
+
+    dprintf(INFO, "\nMemory capacity: %lu\n", mmc_dev->mem_capacity);
+}
+
 status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SEND_CSD,
@@ -127,7 +154,7 @@ static status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, uint8_t *buffer) {
     return NO_ERROR;
 }
 
-status_t mmc_select_card(struct mmc_device *mmc_dev) {
+static status_t mmc_select_card(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = {
         .idx = MMC_CMD_SELECT_CARD,
         .resp_type = MMC_RESP_R1B,
@@ -208,33 +235,6 @@ void trace_cmd_resp(struct mmc_cmd *cmd) {
     for (uint32_t i = 0; i < count; i++) {
         printf("SDHCI: resp[%d]: 0x%x\n", i, cmd->resp[i]);
     }
-}
-
-void print_mmc_info(struct mmc_device *mmc_dev) {
-    struct mmc_cid *cid = &mmc_dev->cid;
-    struct mmc_csd *csd = &mmc_dev->csd;
-    struct mmc_ext_csd *ext_csd = &mmc_dev->ext_csd;
-
-    dprintf(INFO, "CID Register\n");
-    dprintf(INFO, "\tManufacturer ID: 0x%02X\n", cid->mid);
-    dprintf(INFO, "\tOEM/Application ID: %s\n", cid->oid);
-    dprintf(INFO, "\tProduct Name: %s\n", cid->pnm);
-    dprintf(INFO, "\tProduct Revision: %u.%u\n", cid->prv_major, cid->prv_minor);
-    dprintf(INFO, "\tProduct Serial Number: 0x%08X\n", cid->psn);
-    dprintf(INFO, "\tManufacturing Date: %04u-%02u\n", cid->mdt_y, cid->mdt_m);
-    dprintf(INFO, "\tCRC7 Checksum: 0x%02X\n", cid->crc);
-
-    dprintf(INFO, "\nCSD Register\n");
-    dprintf(INFO, "\tCSD structure: %d\n", csd->structure);
-    dprintf(INFO, "\tCSD C_SIZE: %d\n", csd->c_size);
-    dprintf(INFO, "\tCSD C_SIZE_MULT: %d\n", csd->c_size_mult);
-    dprintf(INFO, "\tCSD READ_BLK_LEN: %d\n", csd->read_blk_ln);
-
-    dprintf(INFO, "\nExtended CSD register:\n");
-    dprintf(INFO, "\tCSD structure version %x\n", ext_csd->structure);
-    dprintf(INFO, "\tSector count %x\n", ext_csd->sec_count);
-
-    dprintf(INFO, "\nMemory capacity: %lu\n", mmc_dev->mem_capacity);
 }
 
 static status_t mmc_go_idle_state(struct mmc_device *mmc_dev) {
@@ -328,35 +328,6 @@ static status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_c
     return err;
 }
 
-ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
-                        uint64_t block, uint64_t blkcount) {
-    status_t err = mmc_set_block_count(mmc_dev, blkcount);
-    if (err < 0)
-        return err;
-
-    struct mmc_data data = (struct mmc_data){
-        .buffer = buffer,
-        .block = block,
-        .blkcount = blkcount,
-        .flags = MMC_DATA_READ,
-    };
-
-    struct mmc_cmd cmd = (struct mmc_cmd) {
-        .idx = blkcount > 1 ? MMC_CMD_READ_MULTIPLE_BLK : MMC_CMD_READ_SINGLE_BLK,
-        .resp_type = MMC_RESP_R48,
-        .arg = block,
-        .data = &data,
-    };
-
-    err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
-    if (err < 0) {
-        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
-        return err;
-    }
-
-    return blkcount * mmc_dev->blksize;
-}
-
 static int mmc_get_state(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd;
 
@@ -396,6 +367,35 @@ static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const uint8_t *req,
     // 5. Switch back to user partition (CMD6)
     
     return NO_ERROR;
+}
+
+ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
+                        uint64_t block, uint64_t blkcount) {
+    status_t err = mmc_set_block_count(mmc_dev, blkcount);
+    if (err < 0)
+        return err;
+
+    struct mmc_data data = (struct mmc_data){
+        .buffer = buffer,
+        .block = block,
+        .blkcount = blkcount,
+        .flags = MMC_DATA_READ,
+    };
+
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = blkcount > 1 ? MMC_CMD_READ_MULTIPLE_BLK : MMC_CMD_READ_SINGLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = block,
+        .data = &data,
+    };
+
+    err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
+
+    return blkcount * mmc_dev->blksize;
 }
 
 status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev) {
