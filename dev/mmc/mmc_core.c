@@ -115,7 +115,7 @@ status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SEND_CSD,
         .resp_type = MMC_RESP_R138,
-        .arg = 1 << 0x10,
+        .arg = mmc_dev->rca << 0x10,
         .data = NULL
     };
 
@@ -158,7 +158,7 @@ static status_t mmc_select_card(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = {
         .idx = MMC_CMD_SELECT_CARD,
         .resp_type = MMC_RESP_R1B,
-        .arg = 1 << 0x10,
+        .arg = mmc_dev->rca << 0x10,
         .data = NULL,
     };
 
@@ -258,7 +258,7 @@ static status_t mmc_all_send_cid(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_ALL_SEND_CID,
         .resp_type = MMC_RESP_R138,
-        .arg = 1 << 0x10,
+        .arg = mmc_dev->rca << 0x10,
         .data = NULL
     };
 
@@ -277,7 +277,7 @@ static status_t mmc_set_relative_addr(struct mmc_device *mmc_dev) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SET_RELATIVE_ADDR,
         .resp_type = MMC_RESP_R48,
-        .arg = 1 << 0x10,
+        .arg = mmc_dev->rca << 0x10,
         .data = NULL
     };
 
@@ -334,7 +334,7 @@ static int mmc_get_state(struct mmc_device *mmc_dev) {
     do {
         memset(&cmd, 0, sizeof(struct mmc_cmd));
         cmd.idx = MMC_CMD_SEND_STATUS;
-        cmd.arg = 1 << 0x10;
+        cmd.arg = mmc_dev->rca << 0x10;
         cmd.resp_type = MMC_RESP_R48;
         cmd.data = NULL;
 
