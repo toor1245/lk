@@ -18,6 +18,7 @@
 #include <lk/pow2.h>
 #include <lk/err.h>
 #include <lk/list.h>
+#include <lk/bits.h>
 
 #include <lib/bio.h>
 

@@ -14,6 +14,8 @@
 #include <lk/compiler.h>
 
 #include <lk/err.h>
+#include <lk/bits.h>
+
 #include <platform/time.h>
 #include <dev/mmc.h>
 #include <dev/mmc/sdhci.h>

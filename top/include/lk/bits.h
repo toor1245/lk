@@ -11,6 +11,9 @@
 #include <arch/ops.h>
 #include <lk/compiler.h>
 
+#include <assert.h>
+#include <stdint.h>
+
 __BEGIN_CDECLS
 
 #define clz(x) __builtin_clz(x)
@@ -67,6 +70,60 @@ static inline int bitmap_ffz(unsigned long *bitmap, int numbits) {
         return -1;
     }
     return -1;
+}
+
+static inline uint32_t extract_bit_range128(const uint32_t resp[4],
+                                            uint32_t msb, uint32_t lsb) {
+    assert(msb < 128);
+    assert(lsb < 128);
+    assert(msb >= lsb);
+
+    uint32_t width = msb - lsb + 1;
+    assert(width <= 32);
+
+    // Word indices (resp[0] = bits 127..96)
+    uint32_t w_msb = 3 - (msb >> 5);
+    uint32_t w_lsb = 3 - (lsb >> 5);
+
+    // Bit positions in their words
+    uint32_t b_msb = msb & 31;
+    uint32_t b_lsb = lsb & 31;
+
+    uint32_t result;
+
+    if (w_msb == w_lsb) {
+        // Field fits in a single word
+        result = (resp[w_msb] >> (b_lsb)) & ((1U << width) - 1U);
+    } else {
+        // Field spans two words
+        uint32_t upper = resp[w_msb] & ((1U << (b_msb + 1U)) - 1U);
+        uint32_t lower = resp[w_lsb] >> b_lsb;
+        result = (upper << (width - (b_msb + 1U))) | lower;
+    }
+
+    return result;
+}
+
+static inline uint64_t extract_bit_range(uint32_t reg, uint32_t msb,
+                                         uint32_t lsb) {
+  const uint64_t bits = msb - lsb + 1ULL;
+  const uint64_t mask = (1ULL << bits) - 1ULL;
+  assert(msb >= lsb);
+  return (reg >> lsb) & mask;
+}
+
+static inline uint64_t extract_byte_range512(char *buffer, uint32_t offset,
+                                             uint32_t len) {
+    assert(offset + len <= 512);
+    assert(len > 0 && len <= 8);
+
+    uint64_t result = 0;
+
+    for (uint32_t i = 0; i < len; i++) {
+        result |= ((uint64_t)buffer[offset + i] << (8 * i));
+    }
+
+    return result;
 }
 
 __END_CDECLS
