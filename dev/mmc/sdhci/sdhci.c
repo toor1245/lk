@@ -36,59 +36,59 @@ static inline void delay(lk_time_t delay) {
 static void sdhci_dump_present_state(uintptr_t base) {
     uint32_t pstate = sdhci_readl(base, SDHCI_REG_PRESENT_STATE);
     printf("SDHCI: PRESENT_STATE: 0x%08x\n", pstate);
-    printf("\tCommand Inhibit (CMD) [0]: %d\n", extract_bit_range(pstate, 0, 0));
-    printf("\tCommand Inhibit (DAT) [1]: %d\n", extract_bit_range(pstate, 1, 1));
-    printf("\tDAT Line Active [2]: %d\n", extract_bit_range(pstate, 2, 2));
-    printf("\tRe-Tuning Request (UHS-I Only) [3]: %d\n", extract_bit_range(pstate, 3, 3));
-    printf("\tLine Signal Level (Embedded only) [7:4]: %d\n", extract_bit_range(pstate, 7, 4));
-    printf("\tWrite Transfer Active [8]: %d\n", extract_bit_range(pstate, 8, 8));
-    printf("\tRead Transfer Active [9]: %d\n", extract_bit_range(pstate, 9, 9));
-    printf("\tBuf Write Enable [10]: %d\n", extract_bit_range(pstate, 10, 10));
-    printf("\tBuf Read Enable [11]: %d\n", extract_bit_range(pstate, 11, 11));
-    printf("\tCard Inserted [16]: %d\n", extract_bit_range(pstate, 16, 16));
-    printf("\tCard State Stable [17]: %d\n", extract_bit_range(pstate, 17, 17));
-    printf("\tCard Detect Pin Level [18]: %d\n", extract_bit_range(pstate, 18, 18));
-    printf("\tWrite Protect Switch Level [19]: %d\n", extract_bit_range(pstate, 19, 19));
-    printf("\tDAT[3:0] Line Signal Level [23:20]: %d\n", extract_bit_range(pstate, 23, 20));
-    printf("\tCMD Line Signal Level [24]: %d\n", extract_bit_range(pstate, 24, 24));
-    printf("\tHost Regulator Voltage Stable [25]: %d\n", extract_bit_range(pstate, 25, 25));
-    printf("\tCommand Not Issued by Error [27]: %d\n", extract_bit_range(pstate, 27, 27));
-    printf("\tSub Command Status [28]: %d\n", extract_bit_range(pstate, 28, 28));
+    printf("\tCommand Inhibit (CMD) [0]: %lld\n", extract_bit_range(pstate, 0, 0));
+    printf("\tCommand Inhibit (DAT) [1]: %lld\n", extract_bit_range(pstate, 1, 1));
+    printf("\tDAT Line Active [2]: %lld\n", extract_bit_range(pstate, 2, 2));
+    printf("\tRe-Tuning Request (UHS-I Only) [3]: %lld\n", extract_bit_range(pstate, 3, 3));
+    printf("\tLine Signal Level (Embedded only) [7:4]: %lld\n", extract_bit_range(pstate, 7, 4));
+    printf("\tWrite Transfer Active [8]: %lld\n", extract_bit_range(pstate, 8, 8));
+    printf("\tRead Transfer Active [9]: %lld\n", extract_bit_range(pstate, 9, 9));
+    printf("\tBuf Write Enable [10]: %lld\n", extract_bit_range(pstate, 10, 10));
+    printf("\tBuf Read Enable [11]: %lld\n", extract_bit_range(pstate, 11, 11));
+    printf("\tCard Inserted [16]: %lld\n", extract_bit_range(pstate, 16, 16));
+    printf("\tCard State Stable [17]: %lld\n", extract_bit_range(pstate, 17, 17));
+    printf("\tCard Detect Pin Level [18]: %lld\n", extract_bit_range(pstate, 18, 18));
+    printf("\tWrite Protect Switch Level [19]: %lld\n", extract_bit_range(pstate, 19, 19));
+    printf("\tDAT[3:0] Line Signal Level [23:20]: %lld\n", extract_bit_range(pstate, 23, 20));
+    printf("\tCMD Line Signal Level [24]: %lld\n", extract_bit_range(pstate, 24, 24));
+    printf("\tHost Regulator Voltage Stable [25]: %lld\n", extract_bit_range(pstate, 25, 25));
+    printf("\tCommand Not Issued by Error [27]: %lld\n", extract_bit_range(pstate, 27, 27));
+    printf("\tSub Command Status [28]: %lld\n", extract_bit_range(pstate, 28, 28));
 }
 
 static void sdhci_dump_normal_interrupt_status(uintptr_t base) {
     uint16_t int_status = sdhci_readw(base, SDHCI_REG_NORMAL_INT_STATUS); 
     printf("SDHCI: NORMAL_INT_STATUS: 0x%08x\n", int_status);
-    printf("\tCommand Complete [0]: %d\n", extract_bit_range(int_status, 0, 0));
-    printf("\tTransfer Complete [1]: %d\n", extract_bit_range(int_status, 1, 1));
-    printf("\tBlock Gap Event [2]: %d\n", extract_bit_range(int_status, 2, 2));
-    printf("\tDMA Complete [3]: %d\n", extract_bit_range(int_status, 3, 3));
-    printf("\tBuffer Write Ready [4]: %d\n", extract_bit_range(int_status, 4, 4));
-    printf("\tBuffer Read Ready [5]: %d\n", extract_bit_range(int_status, 5, 5));
-    printf("\tCard Insertion [6]: %d\n", extract_bit_range(int_status, 6, 6));
-    printf("\tCard Removal[7]: %d\n", extract_bit_range(int_status, 7, 7));
-    printf("\tCard Interrupt [8]: %d\n", extract_bit_range(int_status, 8, 8));
-    printf("\tINT_A [9]: %d\n", extract_bit_range(int_status, 9, 9));
-    printf("\tINT_B [10]: %d\n", extract_bit_range(int_status, 10, 10));
-    printf("\tINT_C [11]: %d\n", extract_bit_range(int_status, 11, 11));
-    printf("\tError Interrupt [15]: %d\n", extract_bit_range(int_status, 15, 15));
+    printf("\tCommand Complete [0]: %lld\n", extract_bit_range(int_status, 0, 0));
+    printf("\tTransfer Complete [1]: %lld\n", extract_bit_range(int_status, 1, 1));
+    printf("\tBlock Gap Event [2]: %lld\n", extract_bit_range(int_status, 2, 2));
+    printf("\tDMA Complete [3]: %lld\n", extract_bit_range(int_status, 3, 3));
+    printf("\tBuffer Write Ready [4]: %lld\n", extract_bit_range(int_status, 4, 4));
+    printf("\tBuffer Read Ready [5]: %lld\n", extract_bit_range(int_status, 5, 5));
+    printf("\tCard Insertion [6]: %lld\n", extract_bit_range(int_status, 6, 6));
+    printf("\tCard Removal[7]: %lld\n", extract_bit_range(int_status, 7, 7));
+    printf("\tCard Interrupt [8]: %lld\n", extract_bit_range(int_status, 8, 8));
+    printf("\tINT_A [9]: %lld\n", extract_bit_range(int_status, 9, 9));
+    printf("\tINT_B [10]: %lld\n", extract_bit_range(int_status, 10, 10));
+    printf("\tINT_C [11]: %lld\n", extract_bit_range(int_status, 11, 11));
+    printf("\tError Interrupt [15]: %lld\n", extract_bit_range(int_status, 15, 15));
 }
 
 static void sdhci_dump_error_interrupt_status(uintptr_t base) {
     uint16_t int_status = sdhci_readw(base, SDHCI_REG_ERROR_INT_STATUS);
     printf("SDHCI: ERROR_INT_STATUS: 0x%08x\n", int_status);
-    printf("\tCommand Timeout Error [0]: %d\n", extract_bit_range(int_status, 0, 0));
-    printf("\tCommand CRC Error [1]: %d\n", extract_bit_range(int_status, 1, 1));
-    printf("\tCommand End Bit Error [2]: %d\n", extract_bit_range(int_status, 2, 2));
-    printf("\tCommand Index Error [3]: %d\n", extract_bit_range(int_status, 3, 3));
-    printf("\tData Timeout Error [4]: %d\n", extract_bit_range(int_status, 4, 4));
-    printf("\tData Crc Error [5]: %d\n", extract_bit_range(int_status, 5, 5));
-    printf("\tData End Bit Error [6]: %d\n", extract_bit_range(int_status, 6, 6));
-    printf("\tCurrent Limit Error [7]: %d\n", extract_bit_range(int_status, 7, 7));
-    printf("\tAuto CMD Error [8]: %d\n", extract_bit_range(int_status, 8, 8));
-    printf("\tADMA Error [9]: %d\n", extract_bit_range(int_status, 9, 9));
-    printf("\tResponse Error [11]: %d\n", extract_bit_range(int_status, 11, 11));
-    printf("\tVendor Specific Status Error [15:12]: %d\n", extract_bit_range(int_status, 15, 12));
+    printf("\tCommand Timeout Error [0]: %lld\n", extract_bit_range(int_status, 0, 0));
+    printf("\tCommand CRC Error [1]: %lld\n", extract_bit_range(int_status, 1, 1));
+    printf("\tCommand End Bit Error [2]: %lld\n", extract_bit_range(int_status, 2, 2));
+    printf("\tCommand Index Error [3]: %lld\n", extract_bit_range(int_status, 3, 3));
+    printf("\tData Timeout Error [4]: %lld\n", extract_bit_range(int_status, 4, 4));
+    printf("\tData Crc Error [5]: %lld\n", extract_bit_range(int_status, 5, 5));
+    printf("\tData End Bit Error [6]: %lld\n", extract_bit_range(int_status, 6, 6));
+    printf("\tCurrent Limit Error [7]: %lld\n", extract_bit_range(int_status, 7, 7));
+    printf("\tAuto CMD Error [8]: %lld\n", extract_bit_range(int_status, 8, 8));
+    printf("\tADMA Error [9]: %lld\n", extract_bit_range(int_status, 9, 9));
+    printf("\tResponse Error [11]: %lld\n", extract_bit_range(int_status, 11, 11));
+    printf("\tVendor Specific Status Error [15:12]: %lld\n", extract_bit_range(int_status, 15, 12));
 }
 
 static void sdhci_set_power(uintptr_t base, unsigned short power) {
@@ -229,24 +229,6 @@ static void sdhci_read_resp(uintptr_t base, struct mmc_cmd *cmd) {
     }
 }
 
-static uint16_t sdhci_prepare_cmd(struct mmc_cmd *cmd) {
-    uint32_t flags = 0;
-    if (cmd->resp_type == MMC_RESP_NONE)
-        flags = SDHCI_CMD_RESP_NONE;
-    else if (cmd->resp_type == MMC_RESP_R138)
-        flags = SDHCI_CMD_RESP_LONG | SDHCI_CMD_CRC;
-    else if (cmd->resp_type == MMC_RESP_R1B)
-        flags = SDHCI_CMD_RESP_SHORT_BUSY | SDHCI_CMD_INDEX | SDHCI_CMD_CRC;
-    else
-        flags = SDHCI_CMD_RESP_SHORT | SDHCI_CMD_INDEX | SDHCI_CMD_CRC;
-
-    if (cmd->has_data) {
-        flags |= SDHCI_CMD_DATA; 
-    }
-
-    return SDHCI_MAKE_CMD(cmd->idx, flags);
-}
-
 static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
     struct mmc_host *m = dev->host;
     struct sdhci_host *shost = containerof(m, struct sdhci_host, mmc);
@@ -255,15 +237,15 @@ static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
     status_t err;
 
     uint32_t mask = SDHCI_CMD_INHIBIT;
-    if (cmd->has_data || cmd->resp_type == MMC_RESP_R1B)
+    if (cmd->data || cmd->resp_type == MMC_RESP_R1B)
         mask |= SDHCI_DATA_INHIBIT;
 
-    if (cmd->idx == MMC_CMD_STOP_TRANSMISSION) {
+    if (cmd->idx == MMC_CMD_STOP_TRANSMISSION)
         mask &= ~SDHCI_DATA_INHIBIT;
-    }
 
     err = sdhci_wait_present_state(base, mask);
-    if (err != NO_ERROR) return err;
+    if (err != NO_ERROR)
+        return err;
 
     sdhci_writew(base, SDHCI_INT_ALL_MASK, SDHCI_REG_NORMAL_INT_STATUS);
 
@@ -279,24 +261,21 @@ static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
         flags = SDHCI_CMD_RESP_SHORT | SDHCI_CMD_CRC | SDHCI_CMD_INDEX;
     }
 
-    if (cmd->has_data)
-        flags |= SDHCI_CMD_DATA;
+    if (cmd->data) {
+        sdhci_writew(base, SDHCI_MAKE_BLKSZ(7, dev->blksize), SDHCI_REG_BLOCK_SIZE);
+        sdhci_writew(base, cmd->data->blkcount, SDHCI_REG_BLOCK_COUNT);
 
-    if (cmd->has_data) {
         sdhci_writeb(base, 0xe, SDHCI_REG_TIMEOUT_CONTROL);
-        
-        if (cmd->idx == MMC_CMD_READ_MULTIPLE_BLK || 
-            cmd->idx == MMC_CMD_WRITE_MULTIPLE_BLK) {
-            mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_BLK_CNT_EN | SDHCI_TRNS_ACMD12;
-        }
 
-        if (cmd->idx == MMC_CMD_READ_SINGLE_BLK || 
-            cmd->idx == MMC_CMD_READ_MULTIPLE_BLK ||
-            cmd->idx == MMC_CMD_SEND_EXT_CSD) {
+        if (cmd->data->flags & MMC_DATA_READ)
             mode |= SDHCI_TRNS_READ;
-        }
+
+        if (cmd->data->blkcount > 1)
+            mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_BLK_CNT_EN | SDHCI_TRNS_ACMD12;
 
         sdhci_writew(base, mode, SDHCI_REG_TRANSFER_MODE);
+
+        flags |= SDHCI_CMD_DATA;
     }
 
     sdhci_writel(base, cmd->arg, SDHCI_REG_ARG);
@@ -330,42 +309,17 @@ static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
         sdhci_read_resp(base, cmd);
     }
 
+    if (cmd->data) {
+        bool is_read = (cmd->data->flags & MMC_DATA_READ) != 0;
+
+        err = sdhci_transfer_data(base, cmd->data->buffer, dev->blksize, 
+                                  cmd->data->blkcount, is_read);
+        if (err < 0)
+            return err;
+    }
+
+
     sdhci_writew(base, mask, SDHCI_REG_NORMAL_INT_STATUS);
-
-    return NO_ERROR;
-}
-
-static status_t sdhci_get_ext_csd(struct mmc_device *mmc_dev, uint8_t *buf) {
-    status_t err;
-    struct mmc_host *m = mmc_dev->host;
-    struct sdhci_host *shost = containerof(m, struct sdhci_host, mmc);
-    uintptr_t base = shost->base;
-
-    uint32_t blkcount = 1;
-
-    sdhci_writel(base, SDHCI_MAKE_BLKSZ(7, 512), SDHCI_REG_BLOCK_SIZE);
-    sdhci_writew(base, 1, SDHCI_REG_BLOCK_COUNT);
-
-    struct mmc_cmd cmd = {
-        .idx = MMC_CMD_SEND_EXT_CSD,
-        .resp_type = MMC_RESP_R48,
-        .arg = 0,
-        .has_data = true,
-    };
-
-    err = sdhci_send_cmd(mmc_dev, &cmd);
-    if (err != NO_ERROR) {
-        return err;
-    }
-
-    ssize_t bytes_read = sdhci_transfer_data(base, (char *)buf, 512, blkcount, true);
-    if (bytes_read < 0) {
-        return (status_t)bytes_read;
-    }
-
-	sdhci_writew(base, SDHCI_INT_ALL_MASK, SDHCI_REG_NORMAL_INT_STATUS);
-    sdhci_reset(base, SDHCI_RESET_CMD);
-    sdhci_reset(base, SDHCI_RESET_DATA);
 
     return NO_ERROR;
 }
@@ -407,51 +361,10 @@ static status_t sdhci_fini(struct mmc_device *dev) {
     return NO_ERROR;
 }
 
-ssize_t sdhci_read(struct mmc_device *mmc_dev, struct mmc_xfer_info *info) {
-    status_t err;
-    struct mmc_host *m = mmc_dev->host;
-    struct sdhci_host *shost = containerof(m, struct sdhci_host, mmc);
-    uintptr_t base = shost->base;
-
-    assert(info->blksize == 512);
-    assert(info->blkcount >= 1);
-
-    printf("SDHCI: Read blocks, blkcount=%lld, blksize=%lld,blk=%lld  buffer=%p\n",
-	    info->blkcount, info->blksize, info->block, info->buffer);
-
-    mmc_set_block_count(mmc_dev, info->blkcount);
-
-    sdhci_writew(base, SDHCI_MAKE_BLKSZ(7, info->blksize), SDHCI_REG_BLOCK_SIZE);
-    sdhci_writew(base, info->blkcount, SDHCI_REG_BLOCK_COUNT);
-
-    if (info->blkcount == 1) {
-        err = mmc_read_single_blk(mmc_dev, info->block);
-    } else {
-	    err = mmc_read_multiple_blk(mmc_dev, info->block);
-    }
-
-    if (err < 0)
-        return err;
-
-    printf("SDHCI: Starting data transfer\n");
-
-    ssize_t res = sdhci_transfer_data(base, info->buffer, info->blksize, info->blkcount, true);
-    if (res < 0) {
-        return res;
-    }
-
-    sdhci_writew(base, 0x2, SDHCI_REG_NORMAL_INT_STATUS);
-
-    return res;
-}
-
 static const struct mmc_ops sdhci_ops = {
     .init = sdhci_init,
     .fini = sdhci_fini,
-    .read = sdhci_read,
-    .write = NULL,
     .send_cmd = sdhci_send_cmd,
-    .get_ext_csd = sdhci_get_ext_csd,
 };
 
 static status_t mmc_sdhci_pci_create(struct sdhci_host **out) {

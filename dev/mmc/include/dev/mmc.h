@@ -95,20 +95,22 @@ enum mmc_resp {
     MMC_RESP_R1B,
 };
 
+#define MMC_DATA_READ (1 << 0)
+
+/* MMC/SD data transfer info */
+struct mmc_data {
+    char *buffer;
+    uint64_t blkcount;
+    uint64_t block;
+    uint32_t flags;
+};
+
 struct mmc_cmd {
     uint32_t idx;
     uint32_t arg;
     uint32_t resp[4];
     enum mmc_resp resp_type;
-    bool has_data;
-};
-
-/* MMC/SD data transfer info */
-struct mmc_xfer_info {
-    char *buffer;
-    uint64_t blkcount;
-    uint64_t blksize;
-    uint64_t block;
+    struct mmc_data *data;
 };
 
 struct mmc_host;
@@ -117,9 +119,6 @@ struct mmc_ops {
     status_t (*init)(struct mmc_device *mmc_dev);
     status_t (*fini)(struct mmc_device *mmc_dev);
     status_t (*send_cmd)(struct mmc_device *mmc_dev, struct mmc_cmd *cmd);
-    ssize_t (*read)(struct mmc_device *mmc_dev, struct mmc_xfer_info *info);
-    ssize_t (*write)(struct mmc_device *mmc_dev, struct mmc_xfer_info *info);
-    status_t (*get_ext_csd)(struct mmc_device *dev, uint8_t *buf);
 };
 
 /* MMC/SD interface */
@@ -128,23 +127,10 @@ struct mmc_host {
     void *priv;
 };
 
+/* MMC/SD API */
 status_t mmc_init(struct mmc_host *host);
-
-/* MMC/SD card commands */
-status_t mmc_go_idle_state(struct mmc_device *mmc_dev);
-status_t mmc_all_send_cid(struct mmc_device *mmc_dev);
-status_t mmc_send_op_cond(struct mmc_device *mmc_dev);
-status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, uint8_t *buffer);
-status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp);
-status_t mmc_read_single_blk(struct mmc_device *mmc_dev, uint32_t block);
-status_t mmc_read_multiple_blk(struct mmc_device *mmc_dev, uint32_t block);
-status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_count);
-status_t mmc_write_single_blk(struct mmc_device *mmc_dev, uint32_t block);
-status_t mmc_write_multiple_blk(struct mmc_device *mmc_dev, uint32_t block);
-status_t mmc_stop_transmission(struct mmc_device *mmc_dev);
-
-/* SD card specific commands */
-status_t sd_set_app_cmd(struct mmc_device *mmc_dev);
+ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
+                        uint64_t block, uint64_t blkcount);
 
 /**
  * Extract a bit range from a 128-bit MMC/SD register (CID/CSD/other)

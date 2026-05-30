@@ -19,33 +19,16 @@
 
 ssize_t mmc_bdev_read_block(struct bdev *bdev, void *buf, bnum_t block, uint count) {
     struct mmc_device *dev = containerof(bdev, struct mmc_device, bdev);
-
-    struct mmc_xfer_info info = (struct mmc_xfer_info) {
-        .buffer = buf,
-        .blkcount = count,
-        .blksize = dev->blksize,
-        .block = block,
-    };
-
-    return dev->host->ops->read(dev, &info);
+    return mmc_read_blocks(dev, buf, block, count);
 }
 
 ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, uint count) {
-    struct mmc_device *dev = containerof(bdev, struct mmc_device, bdev);
-
-    struct mmc_xfer_info info = (struct mmc_xfer_info) {
-        .buffer = buf,
-        .blkcount = count,
-        .blksize = dev->blksize,
-        .block = block,
-    };
-
-    return dev->host->ops->write(dev, &info);
+    return ERR_NOT_IMPLEMENTED;
 }
 
 void mmc_bdev_init(struct mmc_device *mmc_dev) {
     printf("MMC: Initializing block device for %s\n", mmc_dev->name);
-    printf("MMC dev: blksize=%zu, blkcount=%zu\n", mmc_dev->blksize, mmc_dev->blkcount);
+    printf("MMC dev: blksize=%llu, blkcount=%u\n", mmc_dev->blksize, mmc_dev->blkcount);
 
     bio_initialize_bdev(&mmc_dev->bdev, mmc_dev->name,
                         mmc_dev->blksize, mmc_dev->blkcount,
