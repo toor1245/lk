@@ -23,7 +23,8 @@ ssize_t mmc_bdev_read_block(struct bdev *bdev, void *buf, bnum_t block, uint cou
 }
 
 ssize_t mmc_bdev_write_block(struct bdev *bdev, const void *buf, bnum_t block, uint count) {
-    return ERR_NOT_IMPLEMENTED;
+    struct mmc_device *dev = containerof(bdev, struct mmc_device, bdev);
+    return mmc_write_blocks(dev, buf, block, count);
 }
 
 void mmc_bdev_init(struct mmc_device *mmc_dev) {

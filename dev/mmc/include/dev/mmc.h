@@ -46,6 +46,19 @@
 #define OCR_ACCESS_MODE_MASK    (0x60000000)
 #define OCR_BUSY_MASK       (0x80000000)
 
+#define MMC_EXT_CSD_PARTITION_CONFIG 179
+
+#define EXT_CSD_SET_CMD	        (0 << 24)
+#define EXT_CSD_SET_BITS        (1 << 24)
+#define EXT_CSD_CLR_BITS        (2 << 24)
+#define EXT_CSD_WRITE_BYTES		(3 << 24)
+#define EXT_CSD_CMD(x)          (((x) & 0xff) << 16)
+#define EXT_CSD_VALUE(x)        (((x) & 0xff) << 8)
+
+#define EXT_CSD_PART_CONFIG_ACC_MASK 0x07
+#define EXT_CSD_PART_CONFIG_ACC_USER 0x00
+#define EXT_CSD_PART_CONFIG_ACC_RPMB 0x03
+
 struct mmc_cid {
     uint8_t mid; /* Manufacturer ID (8 bits) */
     char oid[3]; /* OEM/Application ID (2 ASCII chars + null terminator) */
@@ -75,6 +88,7 @@ struct mmc_csd {
 struct mmc_ext_csd {
     enum mmc_csd_structure structure;
     uint32_t sec_count;
+    uint8_t part_config;
 };
 
 struct mmc_device {
@@ -98,7 +112,7 @@ enum mmc_resp {
     MMC_RESP_R1B,
 };
 
-#define MMC_DATA_READ (1 << 0)
+#define MMC_DATA_READ  (1 << 0)
 
 /* MMC/SD data transfer info */
 struct mmc_data {
@@ -134,5 +148,7 @@ struct mmc_host {
 status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev);
 ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
                         uint64_t block, uint64_t blkcount);
+ssize_t mmc_write_blocks(struct mmc_device *mmc_dev, const char *buffer,
+                         uint64_t block, uint64_t blkcount);
 
 void trace_cmd_resp(struct mmc_cmd *cmd);

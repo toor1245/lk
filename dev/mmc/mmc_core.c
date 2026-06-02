@@ -130,9 +130,9 @@ status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
     return err;
 }
 
-static status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, uint8_t *buffer) {
+static status_t mmc_send_ext_csd(struct mmc_device *mmc_dev, char *buf) {
     struct mmc_data data = (struct mmc_data) {
-        .buffer = buffer,
+        .buffer = buf,
         .block = 0,
         .blkcount = 1,
         .flags = MMC_DATA_READ,
@@ -202,7 +202,7 @@ static status_t mmc_set_mem_caps(struct mmc_device *mmc_dev) {
 
         break;
     case MMC_CSD_EXT:
-        uint8_t *ext_csd_buf = malloc(mmc_dev->blksize);
+        char *ext_csd_buf = malloc(mmc_dev->blksize);
         if (!ext_csd_buf) {
             return ERR_NO_MEMORY;
         }
@@ -311,13 +311,16 @@ static status_t mmc_send_op_cond(struct mmc_device *mmc_dev) {
     return err;
 }
 
-static status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_count) {
+static status_t mmc_set_block_count(struct mmc_device *mmc_dev, uint32_t block_count,
+                                    bool is_rel_write) {
     struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SET_BLOCK_COUNT,
         .resp_type = MMC_RESP_R48,
         .arg = block_count,
-        .data = NULL
     };
+
+    if (is_rel_write)
+        cmd.arg |= 1 << 31;
 
     status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
     if (err < 0) {
@@ -336,7 +339,6 @@ static int mmc_get_state(struct mmc_device *mmc_dev) {
         cmd.idx = MMC_CMD_SEND_STATUS;
         cmd.arg = mmc_dev->rca << 0x10;
         cmd.resp_type = MMC_RESP_R48;
-        cmd.data = NULL;
 
         status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
         if (err < 0) {
@@ -349,29 +351,195 @@ static int mmc_get_state(struct mmc_device *mmc_dev) {
     return extract_bit_range(cmd.resp[0], 12, 9);
 }
 
-static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const uint8_t *req, 
-                                      uint32_t req_len, uint8_t *resp, uint32_t resp_len) {
-    struct mmc_device *mmc_dev = (struct mmc_device *)rdev->priv;
-
-    mmc_dev->host->ops->send_cmd(mmc_dev, &(struct mmc_cmd) {
+static status_t mmc_set_ext_csd(struct mmc_device *mmc_dev, uint8_t index, uint8_t value) {
+    struct mmc_cmd cmd = (struct mmc_cmd) {
         .idx = MMC_CMD_SWITCH,
         .resp_type = MMC_RESP_R48,
-        .arg = (0x03 << 24) | (0x01 << 8) | 0x01,
-        .data = NULL,
-    });
+        .arg = EXT_CSD_WRITE_BYTES | EXT_CSD_CMD(index) | EXT_CSD_VALUE(value) | 1,
+    };
+
+    status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d\n", cmd.idx);
+    }
+
+    return err;
+}
+
+static status_t mmc_rpmb_enable(struct mmc_device *mmc_dev) {
+    uint8_t current_cfg = mmc_dev->ext_csd.part_config;
+    uint8_t new_cfg = (current_cfg & ~EXT_CSD_PART_CONFIG_ACC_MASK) | EXT_CSD_PART_CONFIG_ACC_RPMB;
     
-    // 1. Switch to RPMB partition (CMD6)
-    // 2. Set block count and reliable write flags (CMD23)
-    // 3. Write requests (CMD25)
-    // 4. Read response if requested (CMD25 + CMD18)
-    // 5. Switch back to user partition (CMD6)
+    return mmc_set_ext_csd(mmc_dev, MMC_EXT_CSD_PARTITION_CONFIG, new_cfg);
+}
+
+static status_t mmc_rpmb_disable(struct mmc_device *mmc_dev) {
+    uint8_t current_cfg = mmc_dev->ext_csd.part_config;
+    uint8_t new_cfg = (current_cfg & ~EXT_CSD_PART_CONFIG_ACC_MASK) | EXT_CSD_PART_CONFIG_ACC_USER;
+    
+    return mmc_set_ext_csd(mmc_dev, MMC_EXT_CSD_PARTITION_CONFIG, new_cfg);
+}
+
+static status_t mmc_rpmb_write_multi_blk(struct mmc_device *mmc_dev,
+                                         struct rpmb_frame *frame, uint32_t blkcount) {
+    struct mmc_data data = (struct mmc_data) {
+        .buffer = (char *)frame,
+        .blkcount = blkcount,
+    };
+
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_WRITE_MULTIPLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .data = &data,
+    };
+
+    status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
+
+    return err;
+}
+
+static status_t mmc_rpmb_read_multi_block(struct mmc_device *mmc_dev,
+                                          struct rpmb_frame *frame, uint32_t blkcount) {
+    struct mmc_data data = (struct mmc_data) {
+        .buffer = (char *)frame,
+        .blkcount = blkcount,
+        .flags = MMC_DATA_READ,
+    };
+
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = MMC_CMD_READ_MULTIPLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .data = &data,
+    };
+
+    status_t err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
+
+    return err;
+}
+
+static status_t mmc_rpmb_route_write_req(struct mmc_device *mmc_dev, struct rpmb_frame *req,
+                                         uint16_t req_cnt, struct rpmb_frame *resp,
+                                         uint16_t resp_cnt) {
+    status_t err = mmc_set_block_count(mmc_dev, req->block_count, true);
+    if (err < 0)
+        return err;
+
+    err = mmc_rpmb_write_multi_blk(mmc_dev, req, req->block_count);
+    if (err < 0)
+        return err;
+
+    err = mmc_set_block_count(mmc_dev, 1, false);
+    if (err < 0)
+        return err;
+
+    memset(resp, 0, sizeof(struct rpmb_frame));
+    resp->req_resp = BE16(RPMB_REQ_RESULT_READ);
+
+    err = mmc_rpmb_write_multi_blk(mmc_dev, resp, 1);
+    if (err < 0)
+        return err;
+
+    err = mmc_set_block_count(mmc_dev, 1, false);
+    if (err < 0)
+        return err;
+
+    return mmc_rpmb_read_multi_block(mmc_dev, resp, 1);
+}
+
+static status_t mmc_rpmb_route_read_req(struct mmc_device *mmc_dev, struct rpmb_frame *req,
+                                        uint16_t req_cnt, struct rpmb_frame *resp,
+                                        uint16_t resp_cnt) {
+    status_t err = mmc_set_block_count(mmc_dev, 1, false);
+    if (err < 0)
+        return err;
+
+    err = mmc_rpmb_write_multi_blk(mmc_dev, req, 1);
+    if (err < 0)
+        return err;
+
+    err = mmc_set_block_count(mmc_dev, 1, false);
+    if (err < 0)
+        return err;
+
+    return mmc_rpmb_read_multi_block(mmc_dev, resp, resp_cnt);
+}
+
+static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const void *req, 
+                                      uint32_t req_len, void *resp, uint32_t resp_len) {
+    status_t err;
+    struct mmc_device *mmc_dev = (struct mmc_device *)rdev->priv;
+
+    err = mmc_rpmb_enable(mmc_dev);
+    if (err < 0) {
+        printf("Failed to enable RPMB partition, reason: %d\n", err);
+        return err;
+    }
+
+    struct rpmb_frame *req_frame = (struct rpmb_frame *)req;
+
+    if (req_len < RPMB_FRAME_SIZE) {
+        printf("Invalid request length: %u\n", req_len);
+        return ERR_INVALID_ARGS;
+    }
+
+    status_t route_err = NO_ERROR;
+
+    uint16_t req_type = BE16(req_frame->req_resp);
+    switch (req_type)
+    {
+        case RPMB_REQ_PROGRAM_KEY:
+            printf("RPMB: Program key request\n");
+
+            route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
+            break;
+
+        case RPMB_REQ_READ_WRITE_COUNTER:
+            printf("RPMB: Read write counter request\n");
+
+            route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
+            break;
+
+        case RPMB_REQ_AUTH_WRITE:
+            printf("RPMB: Authenticated write request\n");
+
+            route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
+            break;
+
+        case RPMB_REQ_AUTH_READ:
+            printf("RPMB: Authenticated read request\n");
+
+            route_err = mmc_rpmb_route_read_req(mmc_dev, req_frame, req_len, resp, resp_len);
+            break;
+
+        default:
+            printf("RPMB: Unsupported request type: 0x%04X\n", req_type);
+            route_err = ERR_INVALID_ARGS;
+    }
+
+    err = mmc_rpmb_disable(mmc_dev);
+    if (err < 0) {
+        printf("Failed to disable RPMB partition, reason: %d\n", err);
+        return err;
+    }
+
+    if (route_err < 0) {
+        printf("Failed to route RPMB request, reason: %d\n", route_err);
+    }
     
     return NO_ERROR;
 }
 
 ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
                         uint64_t block, uint64_t blkcount) {
-    status_t err = mmc_set_block_count(mmc_dev, blkcount);
+    status_t err = mmc_set_block_count(mmc_dev, blkcount, false);
     if (err < 0)
         return err;
 
@@ -397,6 +565,39 @@ ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
 
     return blkcount * mmc_dev->blksize;
 }
+
+ssize_t mmc_write_blocks(struct mmc_device *mmc_dev, const char *buffer,
+                         uint64_t block, uint64_t blkcount) {
+    status_t err = mmc_set_block_count(mmc_dev, blkcount, false);
+    if (err < 0)
+        return err;
+
+    struct mmc_data data = (struct mmc_data){
+        .buffer = (char *)buffer,
+        .block = block,
+        .blkcount = blkcount,
+        .flags = 0,
+    };
+
+    struct mmc_cmd cmd = (struct mmc_cmd) {
+        .idx = blkcount > 1 ? MMC_CMD_WRITE_MULTIPLE_BLK : MMC_CMD_WRITE_SINGLE_BLK,
+        .resp_type = MMC_RESP_R48,
+        .arg = block,
+        .data = &data,
+    };
+
+    err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+    if (err < 0) {
+        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+        return err;
+    }
+
+    return blkcount * mmc_dev->blksize;
+}
+
+static const struct rpmb_ops rpmb_ops = {
+    .route_frames = mmc_rpmb_route_frames,
+};
 
 status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev) {
     status_t err;
@@ -439,6 +640,21 @@ status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev) {
 
     mmc_set_mem_caps(mmc_dev); 
     print_mmc_info(mmc_dev);
+
+    struct rpmb_dev *rpmb = malloc(sizeof(struct rpmb_dev));
+    if (!rpmb) {
+        return ERR_NO_MEMORY;
+    }
+
+    rpmb->type = RPMB_TYPE_EMMC;
+    rpmb->priv = mmc_dev;
+    rpmb->ops = &rpmb_ops;
+
+    err = rpmb_dev_register(rpmb);
+    if (err < 0) {
+        free(rpmb);
+        return err;
+    }
 
     *out_dev = mmc_dev;
 
