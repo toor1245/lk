@@ -549,7 +549,7 @@ ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
         return max_blocks;
 
     while (blocks_remaining > 0) {
-        uint32_t chunk = (blocks_remaining > max_blocks) ? 
+        uint32_t chunk = (blocks_remaining > max_blocks) ?
                          max_blocks : blocks_remaining;
 
         err = mmc_set_block_count(mmc_dev, chunk, false);
