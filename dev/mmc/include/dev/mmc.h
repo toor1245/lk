@@ -136,6 +136,7 @@ struct mmc_ops {
     status_t (*init)(struct mmc_device *mmc_dev);
     status_t (*fini)(struct mmc_device *mmc_dev);
     status_t (*send_cmd)(struct mmc_device *mmc_dev, struct mmc_cmd *cmd);
+    ssize_t (*get_max_block_count)(struct mmc_device *mmc_dev);
 };
 
 /* MMC/SD interface */

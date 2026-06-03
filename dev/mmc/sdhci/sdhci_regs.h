@@ -121,10 +121,11 @@
 #define  SDHCI_CLOCK_INT_STABLE	BIT(1)
 #define  SDHCI_CLOCK_INT_EN	BIT(0)
 
-
 #define SDHCI_REG_TIMEOUT_CONTROL 0x2E
 
 #define SDHCI_MAKE_CMD(c, f) (((c & 0xff) << 8) | (f & 0xff))
+#define SDHCI_MAKE_BLKSZ(dma, blksz) (((dma & 0x7) << 12) | (blksz & 0xFFF))
+#define SDHCI_MAX_BLOCKS 65535
 
 static inline uint32_t sdhci_readl(uintptr_t base, uint32_t reg) {
     return *(volatile uint32_t *)(base + reg);

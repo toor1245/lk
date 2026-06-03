@@ -27,8 +27,6 @@
 
 #include "sdhci_regs.h"
 
-#define SDHCI_MAKE_BLKSZ(dma, blksz) (((dma & 0x7) << 12) | (blksz & 0xFFF))
-
 static inline void delay(lk_time_t delay) {
     lk_time_t start = current_time();
 
@@ -158,20 +156,23 @@ static status_t sdhci_transfer_data(uintptr_t base, char *buf, uint64_t blksize,
 
             tmp += blksize;
             bytes_trns += blksize;
+
+            start = current_time();
+
             if (++block >= blkcount) {
                 transfer_done = true;
                 continue;
             }
         }
 
-        if (current_time() - start > 5000) {
+        if (current_time() - start > 10000) {
             printf("SDHCI: Transfer timeout! Stat: 0x%08x, Present: 0x%08x\n", 
                    stat, sdhci_readw(base, SDHCI_REG_PRESENT_STATE));
             sdhci_dump_present_state(base);
             return ERR_TIMED_OUT;
         }
 
-    } while (!(stat & SDHCI_INT_DATA_END));
+    } while (!transfer_done || !(stat & SDHCI_INT_DATA_END));
 
     sdhci_writew(base, SDHCI_INT_DATA_END, SDHCI_REG_NORMAL_INT_STATUS);
 
@@ -273,7 +274,7 @@ static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
             mode |= SDHCI_TRNS_READ;
 
         if (cmd->data->blkcount > 1)
-            mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_BLK_CNT_EN | SDHCI_TRNS_ACMD12;
+            mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_BLK_CNT_EN;
 
         sdhci_writew(base, mode, SDHCI_REG_TRANSFER_MODE);
 
@@ -363,10 +364,15 @@ static status_t sdhci_fini(struct mmc_device *dev) {
     return NO_ERROR;
 }
 
+static ssize_t sdhci_get_max_block_count(struct mmc_device *mmc_dev) {
+    return SDHCI_MAX_BLOCKS;
+}
+
 static const struct mmc_ops sdhci_ops = {
     .init = sdhci_init,
     .fini = sdhci_fini,
     .send_cmd = sdhci_send_cmd,
+    .get_max_block_count = sdhci_get_max_block_count,
 };
 
 static status_t mmc_sdhci_pci_create(struct sdhci_host **out) {

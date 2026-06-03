@@ -539,28 +539,46 @@ static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const void *req,
 
 ssize_t mmc_read_blocks(struct mmc_device *mmc_dev, char *buffer,
                         uint64_t block, uint64_t blkcount) {
-    status_t err = mmc_set_block_count(mmc_dev, blkcount, false);
-    if (err < 0)
-        return err;
+    status_t err;
+    uint64_t blocks_remaining = blkcount;
+    uint64_t current_block = block;
+    char *current_buf = buffer;
 
-    struct mmc_data data = (struct mmc_data){
-        .buffer = buffer,
-        .block = block,
-        .blkcount = blkcount,
-        .flags = MMC_DATA_READ,
-    };
+    ssize_t max_blocks = mmc_dev->host->ops->get_max_block_count(mmc_dev);
+    if (max_blocks < 0)
+        return max_blocks;
 
-    struct mmc_cmd cmd = (struct mmc_cmd) {
-        .idx = blkcount > 1 ? MMC_CMD_READ_MULTIPLE_BLK : MMC_CMD_READ_SINGLE_BLK,
-        .resp_type = MMC_RESP_R48,
-        .arg = block,
-        .data = &data,
-    };
+    while (blocks_remaining > 0) {
+        uint32_t chunk = (blocks_remaining > max_blocks) ? 
+                         max_blocks : blocks_remaining;
 
-    err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
-    if (err < 0) {
-        LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
-        return err;
+        err = mmc_set_block_count(mmc_dev, chunk, false);
+        if (err < 0)
+            return err;
+
+        struct mmc_data data = (struct mmc_data){
+            .buffer = current_buf,
+            .block = current_block,
+            .blkcount = chunk,
+            .flags = MMC_DATA_READ,
+        };
+
+        struct mmc_cmd cmd = (struct mmc_cmd) {
+            .idx = chunk > 1 ? MMC_CMD_READ_MULTIPLE_BLK : MMC_CMD_READ_SINGLE_BLK,
+            .resp_type = MMC_RESP_R48,
+            .arg = current_block,
+            .data = &data,
+        };
+
+        err = mmc_dev->host->ops->send_cmd(mmc_dev, &cmd);
+        if (err < 0) {
+            LTRACEF("Failed to send command, cmd: %d, reason: %d\n", cmd.idx, err);
+            return err;
+        }
+
+        blocks_remaining -= chunk;
+        current_block += chunk;
+        current_buf += (chunk * mmc_dev->blksize);
     }
 
     return blkcount * mmc_dev->blksize;
