@@ -20,6 +20,14 @@
 #define TA_FFA_UUID { 0xa3c6f5ec, 0x669a, 0xc14d, \
         { 0x9f, 0xd2, 0x8f, 0x90, 0xf3, 0xeb, 0x5f, 0x05} }
 
+
+/* Struct used to transfer data to Secure world */
+struct xfer_info {
+    uint32_t a;
+    uint32_t b;
+    char str[256];
+};
+
 static int do_ta_test(void) {
 	TEEC_Result res;
 	TEEC_Context ctx;
@@ -42,7 +50,7 @@ static int do_ta_test(void) {
 
     memset(&op, 0, sizeof(op));
 
-    op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_VALUE_OUTPUT,
+    op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INOUT, TEEC_NONE,
 					 TEEC_NONE, TEEC_NONE);
 	op.params[0].value.a = 42;
 
@@ -54,7 +62,23 @@ static int do_ta_test(void) {
         return 1;
     }
 
-	printf("TA incremented value to %d\n", op.params[1].value.a);
+	printf("TA incremented value to %d\n", op.params[0].value.a);
+
+    size_t xfer_size = (sizeof(struct xfer_info) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    struct xfer_info *xfer = (struct xfer_info *)memalign(PAGE_SIZE, xfer_size);
+
+    op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INOUT, TEEC_NONE,
+                     TEEC_NONE, TEEC_NONE);
+    op.params[0].tmpref.buffer = (void *)xfer;
+    op.params[0].tmpref.size = sizeof(struct xfer_info);
+
+    res = TEEC_InvokeCommand(&sess, 1, &op, &err_origin);
+    if (res != TEEC_SUCCESS) {
+        printf("TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
+        return 1;
+    }
+
+    printf("TA modified xfer_info: a = %d, b = %d, str = %s\n", xfer->a, xfer->b, xfer->str);
 
     TEEC_CloseSession(&sess);
 
