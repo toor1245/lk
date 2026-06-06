@@ -9,9 +9,6 @@
 
 #include <stdint.h>
 
-#define FFA_VERSION_MAJOR 0x1
-#define FFA_VERSION_MINOR 0x2
-
 #define FFA_GET_MAJOR(x) ((x >> 16) & 0x7fff)
 #define FFA_GET_MINOR(x) (x & 0xffff)
 
