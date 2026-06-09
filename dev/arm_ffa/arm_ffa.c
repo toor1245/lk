@@ -7,6 +7,8 @@
  */
 
 #include <dev/arm_ffa.h>
+#include <arm_ffa.h>
+#include <arm_ffa_mem.h>
 
 #include <sys/types.h>
 #include <arch/defines.h>
@@ -18,18 +20,13 @@
 #include <lk/init.h>
 #include <lk/debug.h>
 
+#include <kernel/vm.h>
+
 #define FFA_VERSION_MAJOR 0x1
 #define FFA_VERSION_MINOR 0x2
 #define FFA_SUPPORTED_VERSION ((FFA_VERSION_MAJOR << 16) | FFA_VERSION_MINOR)
 
-struct ffa_device {
-    uint32_t version;
-    ffa_endpoint_id_t endpoint_id;
-    void *rx_buffer;
-    void *tx_buffer;
-    ffa_partition_info_t *partitions;
-    size_t desc_count;
-};
+#define UUID_SIZE (sizeof(uint32_t) * 4)
 
 static struct ffa_device ffa_dev;
 
@@ -176,6 +173,111 @@ static status_t arm_ffa_rx_release(struct ffa_device *dev) {
         printf("Failed to release RX buffer state, FF-A Error %llx\n", payload.fid);
         return ERR_GENERIC;
     }
+
+    return NO_ERROR;
+}
+
+struct ffa_device *arm_ffa_get_device(void) {
+    return &ffa_dev;
+}
+
+status_t arm_ffa_find_partition_by_uuid(struct ffa_device *dev,
+                                        const uint32_t uuid[4],
+                                        ffa_partition_info_t *out) {
+    if (uuid == NULL || out == NULL)
+        return ERR_INVALID_ARGS;
+
+    if (dev == NULL || dev->partitions == NULL)
+        return ERR_GENERIC;
+
+    for (size_t i = 0; i < dev->desc_count; i++) {
+        if (memcmp(dev->partitions[i].uuid, uuid, UUID_SIZE) == 0) {
+            *out = dev->partitions[i];
+            return NO_ERROR;
+        }
+    }
+
+    return ERR_NOT_FOUND;
+}
+
+status_t arm_ffa_shm_alloc(struct ffa_device *dev,
+                           ffa_endpoint_id_t receiver_id, ffa_mem_handle_t *handle,
+                           size_t size, void **shm) {
+    ffa_args_t payload;
+    status_t err = NO_ERROR;
+    void *buffer = NULL;
+
+    if (size == 0)
+        return ERR_INVALID_ARGS;
+
+    buffer = memalign(PAGE_SIZE, size);
+    if (buffer == NULL)
+        return ERR_NO_MEMORY;
+
+    uint32_t page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    struct ffa_mem_region_constituent constituents[1];
+    uint32_t constituents_count = sizeof(constituents) / sizeof(struct ffa_mem_region_constituent);
+    constituents[0].address = (void *)vaddr_to_paddr((void *)buffer);
+    constituents[0].page_count = page_count;
+
+    struct ffa_mem_region_init mem_region_init;
+    memset(&mem_region_init, 0x0, sizeof(struct ffa_mem_region_init));
+
+    mem_region_init.memory_region = dev->tx_buffer;
+    mem_region_init.sender = dev->endpoint_id;
+    mem_region_init.receiver = receiver_id;
+    mem_region_init.tag = 0;
+    mem_region_init.flags = 0;
+    mem_region_init.data_access = FFA_DATA_ACCESS_RW;
+    mem_region_init.instruction_access = FFA_INSTRUCTION_ACCESS_NOT_SPECIFIED;
+    mem_region_init.type = FFA_MEM_NORMAL_MEM;
+    mem_region_init.cacheability = FFA_MEM_CACHE_WRITE_BACK;
+    mem_region_init.multi_share = false;
+    mem_region_init.receiver_count = 1;
+
+    mem_region_init.receivers[0].receiver_permissions.receiver = receiver_id;
+    mem_region_init.receivers[0].receiver_permissions.permissions = FFA_DATA_ACCESS_RW;
+    mem_region_init.receivers[0].receiver_permissions.flags = 0;
+    mem_region_init.receivers[0].impdef.val[0] = 0;
+    mem_region_init.receivers[0].impdef.val[1] = 0;
+
+    ffa_memory_region_init(&mem_region_init, constituents, constituents_count);
+
+    memset(&payload, 0, sizeof(ffa_args_t));
+    payload.arg1 = mem_region_init.total_length;
+    payload.arg2 = mem_region_init.fragment_length;
+
+    ffa_mem_share_64(&payload);
+
+    if (payload.fid == FFA_ERROR_SMC32) {
+        err = ERR_GENERIC;
+        goto out_free_buffer;
+    }
+
+    *handle = payload.arg2;
+    *shm = buffer;
+
+    return NO_ERROR;
+
+out_free_buffer:
+    free(buffer);
+
+    return err;
+}
+
+status_t arm_ffa_shm_free(struct ffa_device *dev, ffa_mem_handle_t handle) {
+    ffa_args_t payload;
+    memset(&payload, 0, sizeof(ffa_args_t));
+
+    payload.arg1 = (uint32_t)(handle & 0xFFFFFFFF);
+    payload.arg2 = (uint32_t)(handle >> 32);
+    payload.arg3 = 0;
+
+    ffa_mem_reclaim(&payload);
+
+    if (payload.fid == FFA_ERROR_SMC32)
+        return ERR_GENERIC;
 
     return NO_ERROR;
 }
