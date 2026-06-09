@@ -3,13 +3,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#ifdef GPAPI_OPTEE
-#include <optee/optee_msg.h>
-#include <optee/tee_client_api_imp.h>
-#else
-#error "Unsupported GP API implementation"
-#endif
-
 typedef uint32_t TEEC_Result;
 
 #define TEEC_ORIGIN_API                      0x00000001
@@ -149,19 +142,18 @@ typedef struct {
 } TEEC_UUID;
 
 typedef struct {
-    TEEC_Context_Imp imp;
+    void *imp;
 } TEEC_Context;
 
 typedef struct {
-    TEEC_Session_Imp imp;
+    void *imp;
 } TEEC_Session;
 
 typedef struct {
     void* buffer;
     size_t size;
     uint32_t flags;
-
-    TEEC_SharedMemory_Imp imp;
+    void *imp;
 } TEEC_SharedMemory;
 
 typedef struct {
@@ -190,7 +182,7 @@ typedef struct {
     uint32_t started;
     uint32_t paramTypes;
     TEEC_Parameter params[4];
-    TEEC_Operation_Imp imp;
+    void *imp;
 } TEEC_Operation;
 
 TEEC_Result TEEC_InitializeContext(
