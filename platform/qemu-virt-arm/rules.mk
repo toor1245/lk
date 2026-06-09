@@ -35,6 +35,7 @@ MODULE_DEPS += \
     dev/virtio/gpu \
     dev/virtio/net \
     dev/mmc/sdhci \
+    dev/tee/optee \
     lib/cbuf \
     lib/fdtwalk \
     lib/fs/9p \
