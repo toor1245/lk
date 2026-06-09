@@ -38,13 +38,13 @@ static int do_ta_test(void) {
 
     res = TEEC_InitializeContext(NULL, &ctx);
     if (res != TEEC_SUCCESS) {
-        printf("Failed to initialize\n");
+        printf("Failed to initialize, res=%x\n", res);
         return -1;
     }
 
     res = TEEC_OpenSession(&ctx, &sess, &uuid, TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
-		printf("TEEC_Opensession failed with code 0x%x origin 0x%x\n", res, err_origin);
+		printf("TEEC_OpenSession failed with code 0x%x origin 0x%x\n", res, err_origin);
         return -1;
     }
 
@@ -66,6 +66,8 @@ static int do_ta_test(void) {
 
     size_t xfer_size = (sizeof(struct xfer_info) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     struct xfer_info *xfer = (struct xfer_info *)memalign(PAGE_SIZE, xfer_size);
+    xfer->a = 2;
+    xfer->b = 3;
 
     op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INOUT, TEEC_NONE,
                      TEEC_NONE, TEEC_NONE);

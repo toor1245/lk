@@ -16,7 +16,7 @@ ifeq ($(GPAPI_TEE),1)
 endif
 
 ifeq ($(GPAPI_TRANSPORT),1)
-  MODULE_DEPS += lib/arm_ffa
+  MODULE_DEPS += dev/arm_ffa
 endif
 
 include make/module.mk
