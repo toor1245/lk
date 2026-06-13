@@ -13,6 +13,7 @@ MODULE_SRCS := \
     $(LOCAL_DIR)/ta_test.c \
     $(LOCAL_DIR)/mmc_tests.c \
     $(LOCAL_DIR)/gpt_tests.c \
+    $(LOCAL_DIR)/avb_test.c \
 
 MODULE_FLOAT_SRCS := \
     $(LOCAL_DIR)/benchmarks.c \
