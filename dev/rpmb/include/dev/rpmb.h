@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -31,11 +32,28 @@
 #define RPMB_RESP_AUTH_DEVICE_CONFIG_READ   (0x0600)
 #define RPMB_RESP_AUTH_DEVICE_CONFIG_WRITE  (0x0700)
 
+/* RPMB Operation Results */
+#define RPMB_RESULT_OK                       (0x0000)
+#define RPMB_RESULT_GENERAL_FAILURE          (0x0001)
+#define RPMB_RESULT_AUTH_FAILURE             (0x0002)
+#define RPMB_RESULT_COUNTER_FAILURE          (0x0003)
+#define RPMB_RESULT_ADDRESS_FAILURE          (0x0004)
+#define RPMB_RESULT_WRITE_FAILURE            (0x0005)
+#define RPMB_RESULT_READ_FAILURE             (0x0006)
+#define RPMB_RESULT_AUTH_KEY_NOT_PROGRAMMED  (0x0007)
+
+#define RPMB_STUFF_BYTES_SIZE 196
+#define RPMB_KEY_MAC_SIZE 32
+#define RPMB_DATA_SIZE 256
+#define RPMB_NONCE_SIZE 16
+
+#define RPMB_FRAME_SIZE sizeof(struct rpmb_frame)
+
 struct rpmb_frame {
-    uint8_t stuff_bytes[128];
-    uint8_t key_mac[32];
-    uint8_t data[256];
-    uint8_t nonce[16];
+    uint8_t stuff_bytes[RPMB_STUFF_BYTES_SIZE];
+    uint8_t key_mac[RPMB_KEY_MAC_SIZE];
+    uint8_t data[RPMB_DATA_SIZE];
+    uint8_t nonce[RPMB_NONCE_SIZE];
     uint32_t write_counter;
     uint16_t address;
     uint16_t block_count;
@@ -43,7 +61,7 @@ struct rpmb_frame {
     uint16_t req_resp;
 } __attribute__((packed));
 
-#define RPMB_FRAME_SIZE sizeof(struct rpmb_frame)
+static_assert(sizeof(struct rpmb_frame) == 512, "RPMB frame size must be 512 bytes");
 
 enum rpmb_type {
     RPMB_TYPE_EMMC,

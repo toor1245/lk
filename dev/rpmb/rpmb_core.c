@@ -54,14 +54,17 @@ struct rpmb_dev *rpmb_dev_get(uint32_t id) {
 
 status_t rpmb_route_frames(struct rpmb_dev *dev, const uint8_t *req,
                            uint32_t req_len, uint8_t *resp, uint32_t resp_len) {
-
-    if (!dev || !dev->ops || !dev->ops->route_frames)
+    if (!dev || !dev->ops || !dev->ops->route_frames) {
+        LTRACEF("Invalid input args\n");
         return ERR_INVALID_ARGS;
+    }
 
-    if (!req || req_len == 0 || (req_len % 512 != 0))
+    if (!req || req_len == 0 || (req_len % RPMB_FRAME_SIZE != 0)) {
+        LTRACEF("Invalid request length\n");
         return ERR_INVALID_ARGS;
+    }
 
-    if (resp && (resp_len % 512 != 0))
+    if (resp && (resp_len % RPMB_FRAME_SIZE != 0))
         return ERR_INVALID_ARGS;
 
     return dev->ops->route_frames(dev, req, req_len, resp, resp_len);
