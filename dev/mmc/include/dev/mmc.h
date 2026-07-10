@@ -38,6 +38,7 @@
 #define SD_APP_CMD		(55)
 
 #define CARD_STATUS_ACMD                (1 << 5)
+#define CARD_STATUS_SWITCH_ERROR        (1 << 7)
 #define CARD_STATUS_READY_FOR_DATA      (1 << 8)
 #define MMC_CURRENT_STATE()
 

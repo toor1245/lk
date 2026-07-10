@@ -15,8 +15,10 @@
 
 #include <lk/err.h>
 #include <lk/bits.h>
+#include <lk/trace.h>
 
 #include <platform/time.h>
+
 #include <dev/mmc.h>
 #include <dev/mmc/sdhci.h>
 #include <kernel/vm.h>
@@ -26,6 +28,8 @@
 #endif
 
 #include "sdhci_regs.h"
+
+#define LOCAL_TRACE 0
 
 static inline void delay(lk_time_t delay) {
     lk_time_t start = current_time();
@@ -238,6 +242,8 @@ static status_t sdhci_send_cmd(struct mmc_device *dev, struct mmc_cmd *cmd) {
     uintptr_t base = shost->base;
     uint32_t flags, mode = 0;
     status_t err;
+
+    LTRACEF("SDHCI send cmd: %d\n", cmd->idx);
 
     uint32_t mask = SDHCI_CMD_INHIBIT;
     if (cmd->data || cmd->resp_type == MMC_RESP_R1B)
