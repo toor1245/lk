@@ -259,14 +259,13 @@ int gpt_probe(bdev_t *dev) {
 
         bnum_t block_count = entry->ending_lba - entry->starting_lba + 1;
         bnum_t startblock = entry->starting_lba;
-        
-        printf("Publishing subdevice '%s' for partition %ld: start block 0x%lx, block count 0x%lx\n",
-               blockdev_name, i, startblock, block_count);
+
         status_t err = bio_publish_subdevice(dev->name, blockdev_name, startblock, block_count);
         if (err != NO_ERROR)
             printf("Failed to create subdevice: %s\n", blockdev_name);
         else
-            printf("Created subdevice: %s\n",blockdev_name);
+            printf("Created subdevice '%s' for partition %ld: start block 0x%lx, block count 0x%lx\n",
+               blockdev_name, i, startblock, block_count);
     }
 
 out:
