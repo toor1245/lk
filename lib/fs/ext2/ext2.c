@@ -15,7 +15,7 @@
 #include <lib/fs.h>
 #include "ext2_priv.h"
 
-#define LOCAL_TRACE 0
+#define LOCAL_TRACE 1
 
 static void endian_swap_superblock(struct ext2_super_block *sb) {
     LE32SWAP(sb->s_inodes_count);
@@ -103,14 +103,19 @@ status_t ext2_mount(bdev_t *dev, fscookie **cookie) {
     ext2_t *ext2 = malloc(sizeof(ext2_t));
     ext2->dev = dev;
 
+    LTRACEF("mounting ext2 volume on dev %s\n", dev->name);
+
     err = bio_read(dev, &ext2->sb, 1024, sizeof(struct ext2_super_block));
-    if (err < 0)
+    if (err < 0) {
+        LTRACEF("error reading superblock from dev %s\n", dev->name);
         goto err;
+    }
 
     endian_swap_superblock(&ext2->sb);
 
     /* see if the superblock is good */
     if (ext2->sb.s_magic != EXT2_SUPER_MAGIC) {
+        LTRACEF("ext2: bad magic number 0x%x\n", ext2->sb.s_magic);
         err = -1;
         return err;
     }
