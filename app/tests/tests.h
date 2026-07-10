@@ -18,4 +18,3 @@ int thread_tests(int argc, const console_cmd_args *argv);
 int ta_test(int argc, const console_cmd_args *argv);
 int avb_test(int argc, const console_cmd_args *argv);
 int mmc_tests(int argc, const console_cmd_args *argv);
-int gpt_tests(int argc, const console_cmd_args *argv);

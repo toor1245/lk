@@ -12,7 +12,6 @@ MODULE_SRCS := \
     $(LOCAL_DIR)/thread_tests.c \
     $(LOCAL_DIR)/ta_test.c \
     $(LOCAL_DIR)/mmc_tests.c \
-    $(LOCAL_DIR)/gpt_tests.c \
     $(LOCAL_DIR)/avb_test.c \
 
 MODULE_FLOAT_SRCS := \
@@ -27,7 +26,6 @@ MODULE_DEPS += \
     lib/fs \
     lib/fs/ext2 \
     lib/fs/fat \
-    lib/gpt \
 
 MODULE_COMPILEFLAGS += -fno-builtin
 

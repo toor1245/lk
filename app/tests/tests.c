@@ -23,5 +23,4 @@ STATIC_COMMAND("mem_test", "test memory", &mem_test)
 STATIC_COMMAND("ta_test", "test communication CA with TA over FF-A", &ta_test)
 STATIC_COMMAND("avb_test", "test Android Verified Boot RPMB", &avb_test)
 STATIC_COMMAND("mmc_tests", "test dev/mmc", &mmc_tests)
-STATIC_COMMAND("gpt_tests", "test dev/gpt", &gpt_tests)
 STATIC_COMMAND_END(tests);
