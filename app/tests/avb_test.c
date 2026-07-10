@@ -17,9 +17,8 @@
 #include <string.h>
 #include <tee_client_api.h>
 
-/* FFA UUID ecf5c6a3-9a66-4dc1-9fd2-8f90f3eb5f05 */
 /* AVB UUID 023f8f1a-292a-432b-8fc4-de8471358067 */
-#define TA_AVB_UUID { 0x1a8f3f02, 0x292a, 0x2b43, \
+#define TA_AVB_UUID { 0x1a8f3f02, 0x2a29, 0x2b43, \
         { 0x8f, 0xc4, 0xde, 0x84, 0x71, 0x35, 0x80, 0x67} }
 
 #define TA_AVB_CMD_READ_ROLLBACK_INDEX  0
