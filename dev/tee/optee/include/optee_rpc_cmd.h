@@ -33,7 +33,7 @@
  * [in]     memref[0]	    Frames to device
  * [out]    memref[1]	    Frames from device
  */
-#define OPTEE_RPC_CMD_RPMB		U(1)
+#define OPTEE_RPC_CMD_RPMB		1
 
 /*
  * File system access, see definition of protocol below
@@ -190,7 +190,7 @@
  * [out]    value[0].a	    OPTEE_RPC_SHM_TYPE_*, the parameter for
  *			    OPTEE_RPC_CMD_SHM_ALLOC
  */
-#define OPTEE_RPC_CMD_RPMB_PROBE_RESET	U(22)
+#define OPTEE_RPC_CMD_RPMB_PROBE_RESET	22
 
 /*
  * Probe next RPMB device
@@ -206,7 +206,7 @@
  * [out]    value[0].c	    EXT CSD-slice 222 "Reliable Write Sector Count"
  * [out]    memref[1]       Buffer with the raw CID
  */
-#define OPTEE_RPC_CMD_RPMB_PROBE_NEXT	U(23)
+#define OPTEE_RPC_CMD_RPMB_PROBE_NEXT	23
 
 #define OPTEE_RPC_RPMB_EMMC		U(0)
 
@@ -216,7 +216,7 @@
  * [in]     memref[0]	    Frames to device
  * [out]    memref[1]	    Frames from device
  */
-#define OPTEE_RPC_CMD_RPMB_FRAMES	U(24)
+#define OPTEE_RPC_CMD_RPMB_FRAMES	24
 
 /*
  * Definition of protocol for command OPTEE_RPC_CMD_FS

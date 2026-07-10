@@ -26,20 +26,20 @@ static status_t pack_tee_operation(struct tee_device *dev, TEEC_Operation *teec_
             ptype == TEEC_MEMREF_TEMP_INOUT) {
             
             size_t sz = teec_op->params[i].tmpref.size;
-            struct tee_shm *bounce_shm = NULL;
-            err = dev->ops->shm_alloc(dev, sz, &bounce_shm);
+            struct tee_shm *shm = NULL;
+            err = dev->ops->shm_alloc(dev, sz, &shm);
             if (err) {
                 err = ERR_GENERIC;
                 goto cleanup;
             }
 
             if (ptype != TEEC_MEMREF_TEMP_OUTPUT && teec_op->params[i].tmpref.buffer != NULL) {
-                memcpy((void *)bounce_shm->addr, teec_op->params[i].tmpref.buffer, sz);
+                memcpy((void *)shm->addr, teec_op->params[i].tmpref.buffer, sz);
             }
 
-            tee_op->params[i].tmem.buffer = (void *)bounce_shm->addr;
+            tee_op->params[i].tmem.buffer = (void *)shm->addr;
             tee_op->params[i].tmem.size = sz;
-            tee_op->params[i].tmem.shm = bounce_shm;
+            tee_op->params[i].tmem.shm = shm;
         } else if (ptype == TEEC_VALUE_INPUT || 
                    ptype == TEEC_VALUE_OUTPUT || 
                    ptype == TEEC_VALUE_INOUT) {

@@ -18,9 +18,13 @@
 
 #include <optee_msg.h>
 #include <optee_ffa.h>
+#include <optee_rpc_cmd.h>
+
+#include <dev/rpmb.h>
 
 #include <lk/err.h>
 #include <lk/init.h>
+#include <lk/list.h>
 
 #define OPTEE_FFA_UUID_0 0xe0786148
 #define OPTEE_FFA_UUID_1 0xe311f8e7
@@ -38,6 +42,8 @@ static const uint32_t optee_uuid[4] = {
 struct optee_ffa_info {
     ffa_endpoint_id_t vm_id;
     ffa_endpoint_id_t sp_id;
+    struct rpmb_dev *rpmb_dev;
+    struct list_node shm_list;
 };
 
 struct optee_ffa_call_data {
@@ -48,8 +54,21 @@ struct optee_ffa_call_data {
 };
 
 struct optee_ffa_shm {
+    struct tee_shm *shm;
+    struct list_node node;
     ffa_mem_handle_t handle;
 };
+
+static struct tee_shm *optee_ffa_find_shm(struct optee_ffa_info *optee_ffa, ffa_mem_handle_t handle) {
+    struct optee_ffa_shm *entry;
+    list_for_every_entry(&optee_ffa->shm_list, entry, struct optee_ffa_shm, node) {
+        if (entry->handle == handle) {
+            return entry->shm;
+        }
+    }
+
+    return NULL;
+}
 
 static status_t optee_ffa_xchg_caps(ffa_endpoint_id_t current_id,
                                     ffa_endpoint_id_t sp_id) {
@@ -65,6 +84,8 @@ static status_t optee_ffa_xchg_caps(ffa_endpoint_id_t current_id,
     if (payload.fid != FFA_MSG_SEND_DIRECT_RESP_SMC64 || payload.arg3 != 0) {
         return ERR_GENERIC;
     }
+
+    printf("OP-TEE FF-A Caps: %lld\n", payload.arg4);
 
     return NO_ERROR;
 }
@@ -103,10 +124,95 @@ static status_t optee_ffa_init(struct tee_device *dev) {
     optee_ffa->sp_id = partition.id;
     optee_ffa->vm_id = ffa_dev->endpoint_id;
 
+    list_initialize(&optee_ffa->shm_list);
+
+    struct rpmb_dev *rpmb_dev = rpmb_dev_get(0);
+    if (rpmb_dev) {
+        optee_ffa->rpmb_dev = rpmb_dev;
+        printf("Register RPMB device %d, for OP-TEE FF-A driver\n", rpmb_dev->id);
+    }
+
     return NO_ERROR;
 }
 
-static int optee_ffa_yielding_call_with_arg(struct tee_device *dev, struct optee_ffa_call_data *data) {
+static void optee_ffa_dump_optee_msg_arg(struct optee_msg_arg *arg) {
+    if (!arg) {
+        printf("[OP-TEE Msg Dump] ERROR: arg pointer is NULL\n");
+        return;
+    }
+
+    printf("\n================ [OP-TEE MSG ARG DUMP] ================\n");
+    printf("  Primary Command ID (cmd) : %u\n", arg->cmd);
+    printf("  Return Status Code (ret) : 0x%08X\n", arg->ret);
+    printf("  Return Origin            : %u\n", arg->ret_origin);
+    printf("  Session ID               : 0x%08X\n", arg->session);
+    printf("  Number of Parameters     : %u\n", arg->num_params);
+    printf("-------------------------------------------------------\n");
+
+    for (uint32_t i = 0; i < arg->num_params; i++) {
+        uint64_t attr = arg->params[i].attr;
+        uint32_t type = attr & 0xFF;
+
+        printf("  Param [%u] - Raw Attr: 0x%08llX (Base Type: 0x%02X)\n", i, (unsigned long long)attr, type);
+
+        switch (type) {
+            case OPTEE_MSG_ATTR_TYPE_NONE:
+                printf("    [TYPE] NONE\n");
+                break;
+
+            case OPTEE_MSG_ATTR_TYPE_VALUE_INPUT:
+            case OPTEE_MSG_ATTR_TYPE_VALUE_OUTPUT:
+            case OPTEE_MSG_ATTR_TYPE_VALUE_INOUT:
+                printf("    [TYPE] VALUE\n");
+                printf("    Value.a : 0x%016llX\n", (unsigned long long)arg->params[i].u.value.a);
+                printf("    Value.b : 0x%016llX\n", (unsigned long long)arg->params[i].u.value.b);
+                printf("    Value.c : 0x%016llX\n", (unsigned long long)arg->params[i].u.value.c);
+                break;
+
+            case OPTEE_MSG_ATTR_TYPE_TMEM_INPUT:
+            case OPTEE_MSG_ATTR_TYPE_TMEM_OUTPUT:
+            case OPTEE_MSG_ATTR_TYPE_FMEM_INOUT:
+                printf("    [TYPE] TMEM\n");
+                printf("    shm_ref : 0x%016llX\n", (unsigned long long)arg->params[i].u.tmem.shm_ref);
+                printf("    buf_ptr : 0x%016llX\n", (unsigned long long)arg->params[i].u.tmem.buf_ptr);
+                printf("    size    : %llu bytes\n", (unsigned long long)arg->params[i].u.tmem.size);
+                break;
+
+            default:
+                printf("    [TYPE] OTHER / UNKNOWN\n");
+                printf("    Raw Octets[0-7]  : 0x%016llX\n", *(unsigned long long*)&arg->params[i].u.octets[0]);
+                printf("    Raw Octets[8-15] : 0x%016llX\n", *(unsigned long long*)&arg->params[i].u.octets[8]);
+                break;
+        }
+        printf("-------------------------------------------------------\n");
+    }
+    printf("=======================================================\n\n");
+}
+
+static void optee_ffa_handle_rpc(struct tee_device *dev, struct optee_msg_arg *arg) {
+    optee_ffa_dump_optee_msg_arg(arg);
+
+    switch (arg->cmd) {
+        case OPTEE_RPC_CMD_RPMB_PROBE_RESET:
+            printf("OPTEE_RPC_CMD_RPMB_PROBE_RESET called: %d\n", arg->cmd);
+            arg->ret = TEE_ERROR_NOT_SUPPORTED;
+            break;
+
+        case OPTEE_RPC_CMD_RPMB_PROBE_NEXT:
+            printf("OPTEE_RPC_CMD_RPMB_PROBE_NEXT called: %d\n", arg->cmd);
+            arg->ret = TEE_ERROR_NOT_SUPPORTED;
+            break;
+
+        default:
+            printf("Unhandled RPC command: %d\n", arg->cmd);
+            arg->ret = TEE_ERROR_NOT_SUPPORTED;
+            break;
+    }
+}
+
+static int optee_ffa_yielding_call_with_arg(struct tee_device *dev,
+                                            struct optee_ffa_call_data *data,
+                                            struct optee_msg_arg *arg) {
     struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
 
     ffa_args_t payload;
@@ -155,17 +261,24 @@ static int optee_ffa_yielding_call_with_arg(struct tee_device *dev, struct optee
 
         switch (payload.arg4) {
             case OPTEE_FFA_YIELDING_CALL_RETURN_RPC_CMD:
-                printf("OPTEE_FFA_YIELDING_CALL_RETURN_RPC_CMD is unsupported\n");
-                return TEE_ERROR_COMMUNICATION;
+                printf("OPTEE_FFA_YIELDING_CALL_RETURN_RPC_CMD started\n");
 
-            case OPTEE_FFA_YIELDING_CALL_RETURN_INTERRUPT:
+                size_t rpc_arg_offs = OPTEE_MSG_GET_ARG_SIZE(arg->num_params);
+                struct optee_msg_arg *rpc_arg = (struct optee_msg_arg *)((uint8_t *)arg + rpc_arg_offs);
+
+                optee_ffa_handle_rpc(dev, rpc_arg);
+
                 current_cmd = OPTEE_FFA_YIELDING_CALL_RESUME;
                 w4 = 0;
                 w5 = 0;
                 w6 = 0;
                 break;
 
-            case OPTEE_FFA_YIELDING_CALL_RETURN_DONE:
+            case OPTEE_FFA_YIELDING_CALL_RETURN_INTERRUPT:
+                current_cmd = OPTEE_FFA_YIELDING_CALL_RESUME;
+                w4 = 0;
+                w5 = 0;
+                w6 = 0;
                 break;
 
             default:
@@ -282,7 +395,7 @@ static int optee_ffa_open_session(struct tee_device *dev,
         .w6  = 0,
     };
 
-    err = optee_ffa_yielding_call_with_arg(dev, &call_data);
+    err = optee_ffa_yielding_call_with_arg(dev, &call_data, arg);
     if (err != TEE_SUCCESS)
         goto out;
 
@@ -339,7 +452,7 @@ int optee_ffa_invoke_cmd(struct tee_device *dev, struct tee_invoke_cmd_data *dat
         .w6 = 0,
     };
 
-    err = optee_ffa_yielding_call_with_arg(dev, &call_data);
+    err = optee_ffa_yielding_call_with_arg(dev, &call_data, arg);
     if (err != TEE_SUCCESS)
         goto out;
 
@@ -381,6 +494,9 @@ static int optee_ffa_shm_alloc(struct tee_device *dev, size_t size, struct tee_s
     }
 
     ffa_shm->handle = handle;
+    ffa_shm->shm = shm;
+
+    list_add_tail(&optee_ffa->shm_list, &ffa_shm->node);
 
     shm->addr = (uintptr_t)buffer;
     shm->priv = ffa_shm;
@@ -407,6 +523,9 @@ static int optee_ffa_shm_free(struct tee_device *dev, struct tee_shm *shm) {
 
     struct ffa_device *ffa_dev = arm_ffa_get_device();
     struct optee_ffa_shm *ffa_shm = (struct optee_ffa_shm *)shm->priv;
+
+    if (list_in_list(&ffa_shm->node))
+        list_delete(&ffa_shm->node);
 
     status_t err = arm_ffa_shm_free(ffa_dev, ffa_shm->handle);
     if (err)
