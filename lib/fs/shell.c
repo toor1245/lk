@@ -278,6 +278,58 @@ static int cmd_df(int argc, const console_cmd_args *argv) {
     return NO_ERROR;
 }
 
+static const char *const supported_fs[] = {
+    "ext2",
+    "fat",
+};
+
+static bool is_fs_supported(const char *fs) {
+    for (size_t i = 0; i < sizeof(supported_fs) / sizeof(supported_fs[0]); i++) {
+        if (!strcmp(fs, supported_fs[i]))
+            return true;
+    }
+    return false;
+}
+
+static int cmd_mount(int argc, const console_cmd_args *argv) {
+    if (argc != 4) {
+        printf("not enough arguments\n");
+        printf("usage: %s <device> <path> <fs>\n", argv[0].str);
+        printf("  supported filesystems: ext2, fat\n");
+        printf("  note: run 'gpt <device>' first to publish the partitions\n");
+        printf("  of a GPT disk (e.g. mmc0) as subdevices to mount\n");
+        return ERR_INVALID_ARGS;
+    }
+
+    const char *device = argv[1].str;
+    const char *path = argv[2].str;
+    const char *fs = argv[3].str;
+
+    if (device[0] == '\0') {
+        printf("device name must not be empty\n");
+        return ERR_INVALID_ARGS;
+    }
+
+    if (path[0] != '/') {
+        printf("mount path '%s' must be absolute (start with '/')\n", path);
+        return ERR_INVALID_ARGS;
+    }
+
+    if (!is_fs_supported(fs)) {
+        printf("unsupported filesystem '%s'\n", fs);
+        printf("supported filesystems: ext2, fat\n");
+        return ERR_NOT_SUPPORTED;
+    }
+
+    status_t err = fs_mount(path, fs, device);
+    if (err != NO_ERROR) {
+        printf("error %d mounting '%s' on '%s' as '%s'\n", err, device, path, fs);
+        return err;
+    }
+
+    return NO_ERROR;
+}
+
 STATIC_COMMAND_START
 STATIC_COMMAND("ls", "dir listing", &cmd_ls)
 STATIC_COMMAND("cd", "change dir", &cmd_cd)
@@ -288,4 +340,5 @@ STATIC_COMMAND("rm", "remove file", &cmd_rm)
 STATIC_COMMAND("stat", "stat file", &cmd_stat)
 STATIC_COMMAND("cat", "cat file", &cmd_cat)
 STATIC_COMMAND("df", "list mounts", &cmd_df)
+STATIC_COMMAND("mount", "mount a filesystem (ext2, fat) from a device", &cmd_mount)
 STATIC_COMMAND_END(fs_shell);
