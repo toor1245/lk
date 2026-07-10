@@ -1,6 +1,7 @@
 # main project for qemu-aarch64
 MODULES += \
 	app/shell \
+	app/rpmb_cmd \
     lib/uefi
 
 include project/virtual/test.mk
