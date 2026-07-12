@@ -90,6 +90,8 @@ struct mmc_ext_csd {
     enum mmc_csd_structure structure;
     uint32_t sec_count;
     uint8_t part_config;
+    uint8_t rel_wr_sec_c;
+    uint8_t rpmb_size_mult;
 };
 
 struct mmc_device {
@@ -98,6 +100,8 @@ struct mmc_device {
     bdev_t bdev;
     const char *name;
     struct mmc_cid cid;
+    /* Raw CID response words, kept for RPMB device identification */
+    uint32_t raw_cid[4];
     struct mmc_csd csd;
     struct mmc_ext_csd ext_csd;
     uint64_t blksize;

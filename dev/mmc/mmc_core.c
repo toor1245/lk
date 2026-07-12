@@ -80,8 +80,10 @@ static void parse_csd(const uint32_t resp[4], struct mmc_csd *csd) {
 }
 
 static void parse_ext_csd(char *buffer, struct mmc_ext_csd *ext_csd) {
+    ext_csd->rpmb_size_mult = extract_byte_range512(buffer, 168, 1);
     ext_csd->structure = extract_byte_range512(buffer, 194, 1);
     ext_csd->sec_count = extract_byte_range512(buffer, 212, 4);
+    ext_csd->rel_wr_sec_c = extract_byte_range512(buffer, 222, 1);
 }
 
 static void print_mmc_info(struct mmc_device *mmc_dev) {
@@ -105,10 +107,15 @@ static void print_mmc_info(struct mmc_device *mmc_dev) {
     dprintf(INFO, "\tCSD READ_BLK_LEN: %d\n", csd->read_blk_ln);
 
     dprintf(INFO, "\nExtended CSD register:\n");
-    dprintf(INFO, "\tCSD structure version %x\n", ext_csd->structure);
-    dprintf(INFO, "\tSector count %x\n", ext_csd->sec_count);
+    dprintf(INFO, "\tCSD structure version 0x%x\n", ext_csd->structure);
+    dprintf(INFO, "\tSector count 0x%x\n", ext_csd->sec_count);
+
+    dprintf(INFO, "\tRPMB size multiplier: 0x%x\n", ext_csd->rpmb_size_mult);
+    dprintf(INFO, "\tReliable Write Sector Count: 0x%x\n", ext_csd->rel_wr_sec_c);
 
     dprintf(INFO, "\nMemory capacity: %lu\n", mmc_dev->mem_capacity);
+    dprintf(INFO, "RPMB Partition Size: %lu\n", mmc_dev->ext_csd.rpmb_size_mult * 128 * 1024);
+    dprintf(INFO, "\n");
 }
 
 status_t mmc_send_csd(struct mmc_device *mmc_dev, uint32_t *resp) {
@@ -269,6 +276,7 @@ static status_t mmc_all_send_cid(struct mmc_device *mmc_dev) {
     }
 
     parse_cid(cmd.resp, &mmc_dev->cid);
+    memcpy(mmc_dev->raw_cid, cmd.resp, sizeof(mmc_dev->raw_cid));
 
     return err;
 }
@@ -732,22 +740,36 @@ status_t mmc_init(struct mmc_host *host, struct mmc_device **out_dev) {
     if (err < 0)
         return err;
 
-    mmc_set_mem_caps(mmc_dev); 
+    mmc_set_mem_caps(mmc_dev);
     print_mmc_info(mmc_dev);
 
-    struct rpmb_dev *rpmb = malloc(sizeof(struct rpmb_dev));
-    if (!rpmb) {
-        return ERR_NO_MEMORY;
-    }
+    /*
+     * The RPMB partition size is calculated from the register
+     * RPMB_SIZE_MULT by using the following equation:
+     * RPMB partition size = 128kB x RPMB_SIZE_MULTes
+    */
+    uint64_t rpmb_part_size = mmc_dev->ext_csd.rpmb_size_mult * 128 * 1024;
 
-    rpmb->type = RPMB_TYPE_EMMC;
-    rpmb->priv = mmc_dev;
-    rpmb->ops = &rpmb_ops;
+    /* If RPMB size is not zero, then RPMB partition is present */
+    if (rpmb_part_size) {
+        struct rpmb_dev *rpmb = calloc(1, sizeof(struct rpmb_dev));
+        if (!rpmb) {
+            return ERR_NO_MEMORY;
+        }
 
-    err = rpmb_dev_register(rpmb);
-    if (err < 0) {
-        free(rpmb);
-        return err;
+        rpmb->type = RPMB_TYPE_EMMC;
+        rpmb->priv = mmc_dev;
+        rpmb->ops = &rpmb_ops;
+        rpmb->capacity = mmc_dev->ext_csd.rpmb_size_mult;
+        rpmb->rel_wr_count = mmc_dev->ext_csd.rel_wr_sec_c;
+        rpmb->dev_id = (const uint8_t *)mmc_dev->raw_cid;
+        rpmb->dev_id_len = sizeof(mmc_dev->raw_cid);
+
+        err = rpmb_dev_register(rpmb);
+        if (err < 0) {
+            free(rpmb);
+            return err;
+        }
     }
 
     *out_dev = mmc_dev;

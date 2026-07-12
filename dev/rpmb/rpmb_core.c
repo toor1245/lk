@@ -67,5 +67,12 @@ status_t rpmb_route_frames(struct rpmb_dev *dev, const uint8_t *req,
     if (resp && (resp_len % RPMB_FRAME_SIZE != 0))
         return ERR_INVALID_ARGS;
 
-    return dev->ops->route_frames(dev, req, req_len, resp, resp_len);
+    rpmb_dump_frames("request", req, req_len);
+
+    status_t err = dev->ops->route_frames(dev, req, req_len, resp, resp_len);
+
+    if (err == NO_ERROR && resp)
+        rpmb_dump_frames("response", resp, resp_len);
+
+    return err;
 }

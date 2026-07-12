@@ -78,7 +78,10 @@ struct rpmb_dev {
     struct list_node node;
     uint32_t id;
     enum rpmb_type type;
-    uint16_t capacity_mult;
+    uint64_t capacity;
+    uint64_t rel_wr_count;
+    const uint8_t *dev_id;
+    uint32_t dev_id_len;
     const struct rpmb_ops *ops;
     void *priv;
 };
@@ -89,3 +92,5 @@ struct rpmb_dev *rpmb_dev_get(uint32_t id);
 
 status_t rpmb_route_frames(struct rpmb_dev *dev, const uint8_t *req,
                            uint32_t req_len, uint8_t *resp, uint32_t resp_len);
+
+void rpmb_dump_frames(const char *label, const void *frames, uint32_t len);
