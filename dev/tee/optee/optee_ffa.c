@@ -43,6 +43,7 @@ struct optee_ffa_info {
     ffa_endpoint_id_t vm_id;
     ffa_endpoint_id_t sp_id;
     struct rpmb_dev *rpmb_dev;
+    uint32_t rpmb_probe_next_id;
     struct list_node shm_list;
 };
 
@@ -68,6 +69,33 @@ static struct tee_shm *optee_ffa_find_shm(struct optee_ffa_info *optee_ffa, ffa_
     }
 
     return NULL;
+}
+
+/*
+ * Resolve an OPTEE_MSG fmem parameter received from secure world to a
+ * local buffer address, or NULL if the reference is unknown or out of
+ * bounds. The buffer size is given by mp->u.fmem.size.
+ */
+static void *optee_ffa_fmem_buffer(struct optee_ffa_info *optee_ffa,
+                                   const struct optee_msg_param *mp) {
+    if (mp->u.fmem.global_id == OPTEE_MSG_FMEM_INVALID_GLOBAL_ID)
+        return NULL;
+
+    struct tee_shm *shm = optee_ffa_find_shm(optee_ffa, mp->u.fmem.global_id);
+    if (shm == NULL) {
+        printf("OP-TEE FF-A: unknown shm global id 0x%llx\n",
+            (unsigned long long)mp->u.fmem.global_id);
+        return NULL;
+    }
+
+    uint64_t offs = mp->u.fmem.offs_low | ((uint64_t)mp->u.fmem.offs_high << 32);
+
+    /* Local FF-A shares are page aligned, so internal_offs is always 0 */
+    if (mp->u.fmem.internal_offs != 0 ||
+        offs > shm->size || mp->u.fmem.size > shm->size - offs)
+        return NULL;
+
+    return (void *)(shm->addr + offs);
 }
 
 static status_t optee_ffa_xchg_caps(ffa_endpoint_id_t current_id,
@@ -126,12 +154,6 @@ static status_t optee_ffa_init(struct tee_device *dev) {
 
     list_initialize(&optee_ffa->shm_list);
 
-    struct rpmb_dev *rpmb_dev = rpmb_dev_get(0);
-    if (rpmb_dev) {
-        optee_ffa->rpmb_dev = rpmb_dev;
-        printf("Register RPMB device %d, for OP-TEE FF-A driver\n", rpmb_dev->id);
-    }
-
     return NO_ERROR;
 }
 
@@ -169,9 +191,21 @@ static void optee_ffa_dump_optee_msg_arg(struct optee_msg_arg *arg) {
                 printf("    Value.c : 0x%016llX\n", (unsigned long long)arg->params[i].u.value.c);
                 break;
 
+            case OPTEE_MSG_ATTR_TYPE_FMEM_INPUT:
+            case OPTEE_MSG_ATTR_TYPE_FMEM_OUTPUT:
+            case OPTEE_MSG_ATTR_TYPE_FMEM_INOUT:
+                printf("    [TYPE] FMEM\n");
+                printf("    global_id     : 0x%016llX\n", (unsigned long long)arg->params[i].u.fmem.global_id);
+                printf("    offs          : 0x%llX\n",
+                    (unsigned long long)arg->params[i].u.fmem.offs_low |
+                    ((unsigned long long)arg->params[i].u.fmem.offs_high << 32));
+                printf("    internal_offs : 0x%X\n", arg->params[i].u.fmem.internal_offs);
+                printf("    size          : %llu bytes\n", (unsigned long long)arg->params[i].u.fmem.size);
+                break;
+
             case OPTEE_MSG_ATTR_TYPE_TMEM_INPUT:
             case OPTEE_MSG_ATTR_TYPE_TMEM_OUTPUT:
-            case OPTEE_MSG_ATTR_TYPE_FMEM_INOUT:
+            case OPTEE_MSG_ATTR_TYPE_TMEM_INOUT:
                 printf("    [TYPE] TMEM\n");
                 printf("    shm_ref : 0x%016llX\n", (unsigned long long)arg->params[i].u.tmem.shm_ref);
                 printf("    buf_ptr : 0x%016llX\n", (unsigned long long)arg->params[i].u.tmem.buf_ptr);
@@ -189,18 +223,214 @@ static void optee_ffa_dump_optee_msg_arg(struct optee_msg_arg *arg) {
     printf("=======================================================\n\n");
 }
 
+static void handle_rpc_shm_alloc(struct tee_device *dev, struct optee_msg_arg *arg) {
+    printf("OPTEE_RPC_CMD_SHM_ALLOC called\n");
+
+    if (arg->num_params != 1 ||
+        arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_INPUT) {
+        printf("Invalid parameters for OPTEE_RPC_CMD_SHM_ALLOC\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    if (arg->params[0].u.value.a != OPTEE_RPC_SHM_TYPE_KERNEL) {
+        printf("Unsupported shm type for OPTEE_RPC_CMD_SHM_ALLOC: %llu\n",
+            (unsigned long long)arg->params[0].u.value.a);
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    uint64_t size = arg->params[0].u.value.b;
+
+    struct tee_shm *shm = NULL;
+    if (dev->ops->shm_alloc(dev, ROUNDUP(size, PAGE_SIZE), &shm) != TEE_SUCCESS) {
+        arg->ret = TEE_ERROR_OUT_OF_MEMORY;
+        return;
+    }
+
+    struct optee_ffa_shm *ffa_shm = (struct optee_ffa_shm *)shm->priv;
+
+    memset(&arg->params[0], 0, sizeof(arg->params[0]));
+    arg->params[0].attr = OPTEE_MSG_ATTR_TYPE_FMEM_OUTPUT;
+    arg->params[0].u.fmem.size = size;
+    arg->params[0].u.fmem.internal_offs = 0;
+    arg->params[0].u.fmem.global_id = ffa_shm->handle;
+
+    arg->ret = TEE_SUCCESS;
+}
+
+static void handle_rpc_shm_free(struct tee_device *dev, struct optee_msg_arg *arg) {
+    struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
+
+    printf("OPTEE_RPC_CMD_SHM_FREE called\n");
+
+    if (arg->num_params != 1 ||
+        arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_INPUT) {
+        printf("Invalid parameters for OPTEE_RPC_CMD_SHM_FREE\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    struct tee_shm *shm = optee_ffa_find_shm(optee_ffa, arg->params[0].u.value.b);
+    if (shm == NULL) {
+        printf("Unknown shm global id for OPTEE_RPC_CMD_SHM_FREE: 0x%llx\n",
+            (unsigned long long)arg->params[0].u.value.b);
+        arg->ret = TEE_ERROR_ITEM_NOT_FOUND;
+        return;
+    }
+
+    dev->ops->shm_free(dev, shm);
+
+    arg->ret = TEE_SUCCESS;
+}
+
+static void handle_rpc_rpmb_reset(struct tee_device *dev, struct optee_msg_arg *arg) {
+    struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
+
+    printf("OPTEE_RPC_CMD_RPMB_PROBE_RESET called\n");
+
+    if (arg->num_params != 1) {
+        printf("Invalid number of parameters for OPTEE_RPC_CMD_RPMB_PROBE_RESET: %u\n",
+            arg->num_params);
+
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    if (arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_OUTPUT) {
+        printf("Invalid parameter type for OPTEE_RPC_CMD_RPMB_PROBE_RESET: 0x%llX\n",
+            (uint64_t)arg->params[0].attr);
+
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    optee_ffa->rpmb_dev = NULL;
+    optee_ffa->rpmb_probe_next_id = 0;
+
+    arg->params[0].u.value.a = OPTEE_RPC_SHM_TYPE_KERNEL;
+    arg->params[0].u.value.b = 0;
+    arg->params[0].u.value.c = 0;
+
+    arg->ret = TEE_SUCCESS;
+}
+
+static void handle_rpc_rpmb_next(struct tee_device *dev, struct optee_msg_arg *arg) {
+    struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
+
+    printf("OPTEE_RPC_CMD_RPMB_PROBE_NEXT called\n");
+
+    if (arg->num_params != 2 ||
+        arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_OUTPUT ||
+        arg->params[1].attr != OPTEE_MSG_ATTR_TYPE_FMEM_OUTPUT) {
+        printf("Invalid parameters for OPTEE_RPC_CMD_RPMB_PROBE_NEXT\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    /* memref[1] is the output buffer for the raw device ID (eMMC CID) */
+    uint8_t *dev_id_buf = optee_ffa_fmem_buffer(optee_ffa, &arg->params[1]);
+    if (dev_id_buf == NULL) {
+        printf("Invalid device ID buffer for OPTEE_RPC_CMD_RPMB_PROBE_NEXT\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    struct rpmb_dev *rpmb_dev = rpmb_dev_get(optee_ffa->rpmb_probe_next_id);
+    if (rpmb_dev == NULL) {
+        printf("No more RPMB devices to probe\n");
+        arg->ret = TEE_ERROR_ITEM_NOT_FOUND;
+        return;
+    }
+    optee_ffa->rpmb_probe_next_id++;
+
+    if (rpmb_dev->type != RPMB_TYPE_EMMC) {
+        printf("OP-TEE FF-A driver supports only eMMC RPMB devices\n");
+        arg->ret = TEE_ERROR_NOT_SUPPORTED;
+        return;
+    }
+
+    if (arg->params[1].u.fmem.size < rpmb_dev->dev_id_len) {
+        printf("Device ID buffer too small for OPTEE_RPC_CMD_RPMB_PROBE_NEXT: %llu < %u\n",
+            (unsigned long long)arg->params[1].u.fmem.size, rpmb_dev->dev_id_len);
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    memcpy(dev_id_buf, rpmb_dev->dev_id, rpmb_dev->dev_id_len);
+    arg->params[1].u.fmem.size = rpmb_dev->dev_id_len;
+
+    optee_ffa->rpmb_dev = rpmb_dev;
+
+    arg->params[0].u.value.a = OPTEE_RPC_RPMB_EMMC;
+    arg->params[0].u.value.b = rpmb_dev->capacity;
+    arg->params[0].u.value.c = rpmb_dev->rel_wr_count;
+
+    arg->ret = TEE_SUCCESS;
+}
+
+static void handle_rpc_rpmb_frames(struct tee_device *dev, struct optee_msg_arg *arg) {
+    struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
+
+    printf("OPTEE_RPC_CMD_RPMB_FRAMES called\n");
+
+    struct rpmb_dev *rpmb_dev = optee_ffa->rpmb_dev;
+    if (rpmb_dev == NULL) {
+        printf("No RPMB device selected, probe first\n");
+        arg->ret = TEE_ERROR_ITEM_NOT_FOUND;
+        return;
+    }
+
+    if (arg->num_params != 2 ||
+        arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_FMEM_INPUT ||
+        arg->params[1].attr != OPTEE_MSG_ATTR_TYPE_FMEM_OUTPUT) {
+        printf("Invalid parameters for OPTEE_RPC_CMD_RPMB_FRAMES\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    void *req = optee_ffa_fmem_buffer(optee_ffa, &arg->params[0]);
+    void *resp = optee_ffa_fmem_buffer(optee_ffa, &arg->params[1]);
+    if (req == NULL || resp == NULL) {
+        printf("Invalid frame buffers for OPTEE_RPC_CMD_RPMB_FRAMES\n");
+        arg->ret = TEE_ERROR_BAD_PARAMETERS;
+        return;
+    }
+
+    status_t err = rpmb_route_frames(rpmb_dev,
+                                     req, (uint32_t)arg->params[0].u.fmem.size,
+                                     resp, (uint32_t)arg->params[1].u.fmem.size);
+    if (err != NO_ERROR) {
+        printf("Failed to route RPMB frames, err=%d\n", err);
+        arg->ret = TEE_ERROR_GENERIC;
+        return;
+    }
+
+    arg->ret = TEE_SUCCESS;
+}
+
 static void optee_ffa_handle_rpc(struct tee_device *dev, struct optee_msg_arg *arg) {
     optee_ffa_dump_optee_msg_arg(arg);
 
     switch (arg->cmd) {
+        case OPTEE_RPC_CMD_SHM_ALLOC:
+            handle_rpc_shm_alloc(dev, arg);
+            break;
+
+        case OPTEE_RPC_CMD_SHM_FREE:
+            handle_rpc_shm_free(dev, arg);
+            break;
+
         case OPTEE_RPC_CMD_RPMB_PROBE_RESET:
-            printf("OPTEE_RPC_CMD_RPMB_PROBE_RESET called: %d\n", arg->cmd);
-            arg->ret = TEE_ERROR_NOT_SUPPORTED;
+            handle_rpc_rpmb_reset(dev, arg);
             break;
 
         case OPTEE_RPC_CMD_RPMB_PROBE_NEXT:
-            printf("OPTEE_RPC_CMD_RPMB_PROBE_NEXT called: %d\n", arg->cmd);
-            arg->ret = TEE_ERROR_NOT_SUPPORTED;
+            handle_rpc_rpmb_next(dev, arg);
+            break;
+
+        case OPTEE_RPC_CMD_RPMB_FRAMES:
+            handle_rpc_rpmb_frames(dev, arg);
             break;
 
         default:
