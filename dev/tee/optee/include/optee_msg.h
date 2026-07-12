@@ -9,6 +9,10 @@
 #include <stdbool.h>
 #include <lk/bits.h>
 
+#ifndef GENMASK
+#define GENMASK(h, l) (BIT_MASK((h) + 1) & ~BIT_MASK(l))
+#endif
+
 /*
  * This file defines the OP-TEE message protocol (ABI) used to communicate
  * with an instance of OP-TEE running in secure world.
