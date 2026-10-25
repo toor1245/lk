@@ -80,7 +80,7 @@ struct virtio_blk_discard_write_zeroes {
         uint32_t reserved:31;
     } flags;
 };
-STATIC_ASSERT(sizeof(virtio_blk_req) == 16);
+STATIC_ASSERT(sizeof(virtio_blk_discard_write_zeroes) == 16);
 
 struct virtio_block_txn {
   /* bio callback, for async */
@@ -91,6 +91,8 @@ struct virtio_block_txn {
   void (*callback)(void *, struct bdev *, ssize_t);
   /* virtio request structure, must be DMA-able */
   struct virtio_blk_req req;
+
+  struct virtio_blk_discard_write_zeroes wz;
 
   /* response status, must be DMA-able */
   uint8_t status;
@@ -136,6 +138,7 @@ static status_t virtio_bdev_read_async(
 static status_t virtio_bdev_write_async(
     bdev *bdev, const void *buf, off_t offset, size_t len,
     void (*callback)(void *, struct bdev *, ssize_t), void *cookie);
+static ssize_t virtio_bdev_erase(struct bdev *bdev, off_t offset, size_t len);
 
 struct virtio_block_dev {
     virtio_device *dev;
@@ -167,6 +170,14 @@ static void dump_feature_bits(const char *name, uint32_t feature) {
     if (feature & VIRTIO_BLK_F_SECURE_ERASE) printf(" SECURE_ERASE");
     if (feature & VIRTIO_BLK_F_ZONED) printf(" ZONED");
     printf("\n");
+}
+
+static paddr_t virtio_block_dma_addr(const void *ptr) {
+#if WITH_KERNEL_VM
+    return vaddr_to_paddr(const_cast<void *>(ptr));
+#else
+    return (paddr_t)(uintptr_t)ptr;
+#endif
 }
 
 status_t virtio_block_init(virtio_device *dev) {
@@ -261,13 +272,15 @@ status_t virtio_block_init(virtio_device *dev) {
     }
     if (host_features & VIRTIO_BLK_F_DISCARD) {
         printf("\tdiscard: max sectors %u max sequence %u alignment %u\n",
-               config->max_discard_sectors, config->max_discard_sectors, config->discard_sector_alignment);
+               config->max_discard_sectors, config->max_discard_seq, config->discard_sector_alignment);
     }
     if (host_features & VIRTIO_BLK_F_WRITE_ZEROES) {
         printf("\twrite zeroes: max sectors %u max sequence %u may unmap %u\n",
                config->max_write_zeroes_sectors, config->max_write_zeroes_seq, config->write_zeros_may_unmap);
     }
-
+    if (bdev->guest_features & VIRTIO_BLK_F_WRITE_ZEROES) {
+        bdev->bdev.erase = &virtio_bdev_erase;
+    }
     return NO_ERROR;
 }
 
@@ -439,10 +452,75 @@ static status_t virtio_block_do_txn(virtio_device *dev, void *buf,
     return NO_ERROR;
 }
 
+static status_t virtio_block_do_write_zeroes(virtio_device *dev, off_t offset, size_t len,
+                                             bio_async_callback_t callback, void *cookie,
+                                             virtio_block_txn **txn_out) {
+    auto *bdev = (virtio_block_dev *)dev->priv();
+    volatile const auto *config = (const virtio_blk_config *)dev->get_config_ptr();
+    uint16_t i;
+    vring_desc *desc;
+
+    LTRACEF("dev %p, offset 0x%llx, len %zu\n", dev, offset, len);
+
+    desc = dev->virtio_alloc_desc_chain(0, 3, &i);
+    LTRACEF("after alloc chain desc %p, i %u\n", desc, i);
+    if (!desc) {
+        return ERR_NO_RESOURCES;
+    }
+
+    virtio_block_txn *txn = &bdev->txns[i];
+    txn->req.type = VIRTIO_BLK_T_WRITE_ZEROES;
+    txn->req.ioprio = 0;
+    txn->req.sector = 0;
+    txn->wz.sector = offset / 512;
+    txn->wz.num_sectors = len / 512;
+    txn->wz.flags.unmap = config->write_zeros_may_unmap ? 1 : 0;
+    txn->wz.flags.reserved = 0;
+    txn->callback = callback;
+    txn->cookie = cookie;
+    txn->len = len;
+    if (txn_out) {
+        *txn_out = txn;
+    }
+
+    paddr_t req_phys = virtio_block_dma_addr(&txn->req);
+    desc->addr = req_phys;
+    desc->len = sizeof(virtio_blk_req);
+    desc->flags |= VRING_DESC_F_NEXT;
+
+    desc = dev->virtio_desc_index_to_desc(0, desc->next);
+    desc->addr = virtio_block_dma_addr(&txn->wz);
+    desc->len = sizeof(txn->wz);
+    desc->flags |= VRING_DESC_F_NEXT;
+
+    desc = dev->virtio_desc_index_to_desc(0, desc->next);
+    desc->addr = virtio_block_dma_addr(&txn->status);
+    desc->len = 1;
+    desc->flags = VRING_DESC_F_WRITE;
+
+    dev->virtio_submit_chain(0, i);
+    dev->bus()->virtio_kick(0);
+    return NO_ERROR;
+}
+
+
 static void sync_completion_cb(void *cookie, struct bdev *dev, ssize_t bytes) {
     DEBUG_ASSERT(cookie);
     event_t *event = (event_t *)cookie;
     event_signal(event, false);
+}
+
+static ssize_t virtio_block_write_zeroes(virtio_device *dev, off_t offset, size_t len) {
+    virtio_block_txn *txn;
+    event_t event;
+    event_init(&event, false, EVENT_FLAG_AUTOUNSIGNAL);
+
+    status_t err = virtio_block_do_write_zeroes(dev, offset, len, &sync_completion_cb, &event, &txn);
+    if (err < 0) {
+        return err;
+    }
+    event_wait(&event);
+    return (txn->status == VIRTIO_BLK_S_OK) ? (ssize_t)len : ERR_IO;
 }
 
 ssize_t virtio_block_read_write(virtio_device *dev, void *buf,
@@ -508,5 +586,35 @@ static ssize_t virtio_bdev_write_block(bdev *bdev, const void *buf, bnum_t block
     ssize_t result = virtio_block_read_write(dev->dev, (void *)buf, (off_t)block * dev->bdev.block_size,
                      count * dev->bdev.block_size, true);
     return result;
+}
+
+static ssize_t virtio_bdev_erase(struct bdev *bdev, off_t offset, size_t len) {
+    struct virtio_block_dev *dev = containerof(bdev, struct virtio_block_dev, bdev);
+
+    LTRACEF("dev %p, offset 0x%llx, len %zu\n", bdev, offset, len);
+
+    if ((offset % bdev->block_size) != 0 || (len % bdev->block_size) != 0) {
+        return ERR_INVALID_ARGS;
+    }
+
+    volatile const auto *config = (const virtio_blk_config *)dev->dev->get_config_ptr();
+    uint64_t max_sectors = config->max_write_zeroes_sectors ? config->max_write_zeroes_sectors
+                                                            : UINT32_MAX;
+    uint64_t max_bytes64 = ROUNDDOWN(MIN(max_sectors * 512, (uint64_t)SIZE_MAX), bdev->block_size);
+    if (max_bytes64 == 0) {
+        return ERR_NOT_SUPPORTED;
+    }
+    size_t max_bytes = (size_t)max_bytes64;
+
+    size_t done = 0;
+    while (done < len) {
+        size_t chunk = MIN(len - done, max_bytes);
+        ssize_t r = virtio_block_write_zeroes(dev->dev, offset + done, chunk);
+        if (r < 0) {
+            return r;
+        }
+        done += chunk;
+    }
+    return done;
 }
 
