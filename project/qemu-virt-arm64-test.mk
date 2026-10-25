@@ -15,3 +15,6 @@ ifeq ($(call TOBOOL,$(USE_RUST)),true)
 $(info "Including rust support")
 include project/virtual/rust.mk
 endif
+
+# Leave secondary CPUs for the OS to start.
+GLOBAL_DEFINES += FDTWALK_LEAVE_SECONDARY_CPUS_OFF=1

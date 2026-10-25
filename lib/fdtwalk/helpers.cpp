@@ -224,6 +224,12 @@ status_t fdtwalk_setup_cpus_arm(const void *fdt) {
                 dprintf(INFO, "FDT: clamping max cpus to %zu\n", cpu_count);
             }
 
+#if FDTWALK_LEAVE_SECONDARY_CPUS_OFF
+            if (cpu_count > 1) {
+                dprintf(INFO, "FDT: leaving %zu secondary cpu%c powered off for the OS\n",
+                        cpu_count - 1, cpu_count == 2 ? ' ' : 's');
+            }
+#else
             LTRACEF("booting %zu cpus\n", cpu_count);
 
             // TODO: revamp the ARM32 path so we do not need the special case here
@@ -248,6 +254,7 @@ status_t fdtwalk_setup_cpus_arm(const void *fdt) {
                     printf("ERROR: psci CPU_ON returns %d\n", ret);
                 }
             }
+#endif // FDTWALK_LEAVE_SECONDARY_CPUS_OFF
         }
     }
 #endif
