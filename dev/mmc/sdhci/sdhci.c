@@ -31,12 +31,6 @@
 
 #define LOCAL_TRACE 0
 
-static inline void delay(lk_time_t delay) {
-    lk_time_t start = current_time();
-
-    while (start + delay > current_time());
-}
-
 static void sdhci_dump_present_state(uintptr_t base) {
     uint32_t pstate = sdhci_readl(base, SDHCI_REG_PRESENT_STATE);
     printf("SDHCI: PRESENT_STATE: 0x%08x\n", pstate);
@@ -110,7 +104,7 @@ static void sdhci_reset(uintptr_t base, uint8_t mask) {
             return;
         }
         timeout--;
-        delay(1000);
+        spin(1000);
     }
 }
 
@@ -193,7 +187,7 @@ static status_t sdhci_wait_present_state(uintptr_t base, uint32_t mask) {
             return ERR_TIMED_OUT;
         }
         time++;
-        delay(1000);
+        spin(1000);
 	}
 
     return NO_ERROR;
@@ -353,7 +347,7 @@ static status_t sdhci_init(struct mmc_device *dev) {
             printf("SDHCI: Internal clock never stabilized\n");
             return ERR_TIMED_OUT;
         }
-        delay(1000);
+        spin(1000);
     }
 
     clk |= SDHCI_CLOCK_CARD_EN;
