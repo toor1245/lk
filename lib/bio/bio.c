@@ -303,6 +303,7 @@ static void bdev_dec_ref(bdev_t *dev) {
         }
 
         free(dev->name);
+        free(dev->label);
     }
 }
 
@@ -357,6 +358,43 @@ bdev_t *bio_open(const char *name) {
     mutex_release(&bdevs.lock);
 
     return bdev;
+}
+
+bdev_t *bio_open_by_label(const char *label) {
+    bdev_t *bdev = NULL;
+
+    LTRACEF(" '%s'\n", label);
+
+    bdev_t *entry;
+    mutex_acquire(&bdevs.lock);
+    list_for_every_entry(&bdevs.list, entry, bdev_t, node) {
+        DEBUG_ASSERT(entry->ref > 0);
+        if (entry->label && !strcmp(entry->label, label)) {
+            bdev = entry;
+            bdev_inc_ref(bdev);
+            break;
+        }
+    }
+    mutex_release(&bdevs.lock);
+
+    return bdev;
+}
+
+void bio_set_label(bdev_t *dev, const char *label) {
+    DEBUG_ASSERT(dev);
+
+    char *copy = NULL;
+    if (label) {
+        copy = strdup(label);
+        if (!copy) {
+            return;
+        }
+    }
+
+    mutex_acquire(&bdevs.lock);
+    free(dev->label);
+    dev->label = copy;
+    mutex_release(&bdevs.lock);
 }
 
 void bio_close(bdev_t *dev) {
@@ -506,6 +544,7 @@ void bio_initialize_bdev(bdev_t *dev,
 
     list_clear_node(&dev->node);
     dev->name = strdup(name);
+    dev->label = NULL;
     dev->block_size = block_size;
     dev->block_count = block_count;
     dev->block_shift = log2_uint(block_size);
@@ -613,6 +652,10 @@ void bio_dump_devices(void) {
 
         printf("\t%s, size %lld, bsize %zd, ref %d",
                entry->name, entry->total_size, entry->block_size, entry->ref);
+
+        if (entry->label) {
+            printf(", label '%s'", entry->label);
+        }
 
         if (!entry->geometry_count || !entry->geometry) {
             printf(" (no erase geometry)");

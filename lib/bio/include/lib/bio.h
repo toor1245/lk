@@ -69,6 +69,7 @@ typedef struct bdev {
 
     // Informational properties
     char *name;       // device name (stable, unique in the namespace)
+    char *label;      // optional partition name (e.g. "misc"), NULL if unset
     off_t total_size; // total size in bytes
 
     size_t block_size;  // natural block size in bytes (>= 1)
@@ -115,6 +116,9 @@ typedef void (*bio_async_callback_t)(void *cookie, bdev_t *dev, ssize_t status);
 // Returns a device handle with its reference count incremented, or NULL on
 // failure (e.g., not found). Must be paired with bio_close().
 bdev_t *bio_open(const char *name);
+
+// Like bio_open(), but finds the device by label (e.g. a GPT partition name).
+bdev_t *bio_open_by_label(const char *label);
 
 // Close a previously opened device handle. Decrements reference count and
 // may trigger device teardown when it reaches zero.
@@ -168,6 +172,9 @@ void bio_initialize_bdev(bdev_t *dev,
                          size_t geometry_count,
                          const bio_erase_geometry_info_t *geometry,
                          uint32_t flags);
+
+// Set or clear (NULL) a device's label; the string is copied.
+void bio_set_label(bdev_t *dev, const char *label);
 
 // Print a summary of registered devices to the debug console.
 void bio_dump_devices(void);
