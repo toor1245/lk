@@ -84,6 +84,24 @@ static struct gpt_partition_entry *gpt_get_entry(
     return (struct gpt_partition_entry *)((uint8_t *)entry_array + byte_offset);
 }
 
+static size_t gpt_entry_name(const struct gpt_partition_entry *entry, char *out, size_t out_size) {
+    size_t i = 0;
+
+    for (; i < GPT_PARTITION_ENTRY_NAME_SIZE && i + 1 < out_size; i++) {
+        uint16_t c = entry->partition_name[i];
+        if (c == 0)
+            break;
+        if (c > 0x7f) {
+            i = 0;
+            break;
+        }
+        out[i] = (char)c;
+    }
+
+    out[i] = '\0';
+    return i;
+}
+
 static ssize_t gpt_read_partition_entry_array(bdev_t *dev, struct gpt_header *header, char *entry_array) {
     uint32_t lba = header->partition_entry_lba * dev->block_size;
     size_t read_size = header->num_partition_entries * header->size_of_partition_entry;
@@ -175,17 +193,9 @@ static void gpt_print_partition_entry(struct gpt_header *header, char *entry_arr
         printf("\t\tStarting LBA: 0x%lx\n", entry->starting_lba);
         printf("\t\tEnding LBA: 0x%lx\n", entry->ending_lba);
         printf("\t\tAttributes: 0x%016lx\n", entry->attributes);
-        printf("\t\tPartition Name: ");
-
-        uint8_t *entry_bytes = (uint8_t *)entry;
-        for (size_t j = 56; j < 128; j += sizeof(uint16_t)) {
-            uint16_t wchar = *((uint16_t *)(entry_bytes + j));
-            if (wchar == 0)
-                break;
-
-            printf("%c", (char)wchar);
-        }
-        printf("\n");
+        char name[GPT_PARTITION_ENTRY_NAME_SIZE + 1];
+        gpt_entry_name(entry, name, sizeof(name));
+        printf("\t\tPartition Name: %s\n", name);
     }
 }
 
@@ -255,17 +265,28 @@ int gpt_probe(bdev_t *dev) {
         if (memcmp(entry, &empty_guid, sizeof(uint8_t) * 16) == 0)
             continue;
 
-        snprintf(blockdev_name, sizeof(blockdev_name), "%sp%d", dev->name, i + 1);
+        snprintf(blockdev_name, sizeof(blockdev_name), "%sp%zu", dev->name, i + 1);
 
         bnum_t block_count = entry->ending_lba - entry->starting_lba + 1;
         bnum_t startblock = entry->starting_lba;
 
         status_t err = bio_publish_subdevice(dev->name, blockdev_name, startblock, block_count);
-        if (err != NO_ERROR)
+        if (err != NO_ERROR) {
             printf("Failed to create subdevice: %s\n", blockdev_name);
-        else
-            printf("Created subdevice '%s' for partition %ld: start block 0x%lx, block count 0x%lx\n",
-               blockdev_name, i, startblock, block_count);
+            continue;
+        }
+
+        char label[GPT_PARTITION_ENTRY_NAME_SIZE + 1];
+        if (gpt_entry_name(entry, label, sizeof(label)) > 0) {
+            bdev_t *sub = bio_open(blockdev_name);
+            if (sub) {
+                bio_set_label(sub, label);
+                bio_close(sub);
+            }
+        }
+
+        printf("Created subdevice '%s' ('%s') for partition %zu: start block 0x%x, block count 0x%x\n",
+               blockdev_name, label, i, startblock, block_count);
     }
 
 out:

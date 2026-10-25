@@ -2,7 +2,8 @@
 MODULES += \
 	app/shell \
 	app/rpmb_cmd \
-    lib/uefi
+	lib/uefi \
+	lib/gpt \
 
 include project/virtual/test.mk
 include project/virtual/fs.mk
