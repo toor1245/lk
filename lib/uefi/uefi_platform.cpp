@@ -18,6 +18,7 @@
 #include "uefi_platform.h"
 
 #include <arch/arm64.h>
+#include <dev/arm_ffa.h>
 #include <lib/bio.h>
 #include <lib/watchdog.h>
 #include <libfdt.h>
@@ -32,6 +33,7 @@
 #include <uefi/types.h>
 
 #include "defer.h"
+#include "ta_avb_client.h"
 
 #define LOCAL_TRACE 0
 
@@ -73,6 +75,14 @@ __WEAK EfiStatus efi_dt_fixup(struct EfiDtFixupProtocol* self, void* fdt,
 
 __WEAK EfiStatus exit_boot_services(EfiHandle image_handle, size_t map_key) {
   printf("%s is called\n", __FUNCTION__);
+
+  ta_avb_release();
+
+  status_t err = arm_ffa_release_rxtx(arm_ffa_get_device());
+  if (err != NO_ERROR) {
+    printf("%s: failed to release FF-A RX/TX buffers: %d\n", __FUNCTION__, err);
+  }
+
   return EFI_STATUS_SUCCESS;
 }
 
