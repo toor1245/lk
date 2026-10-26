@@ -221,6 +221,8 @@ EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
     &dtFixupProtocol,
     &EFI_GBL_EFI_AVB_PROTOCOL_GUID,
     open_gbl_efi_avb_protocol(),
+    &EFI_GBL_EFI_BOOT_CONTROL_PROTOCOL_GUID,
+    open_gbl_efi_boot_control_protocol(),
     &EFI_RNG_PROTOCOL_GUID,
     open_efi_rng_protocol(),
     &EFI_TEXT_INPUT_PROTOCOL_GUID,

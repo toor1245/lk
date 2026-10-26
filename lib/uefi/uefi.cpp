@@ -257,6 +257,31 @@ int cmd_uefi_load(int argc, const console_cmd_args *argv) {
   return 0;
 }
 
+int cmd_uefi_gbl(int argc, const console_cmd_args *argv) {
+  const char *dev = argc > 1 ? argv[1].str : "virtio0";
+  const char *part = argc > 2 ? argv[2].str : "virtio0p15";
+  const char *efi = "/android_esp/GBL.EFI";
+  char script[256];
+
+  snprintf(script, sizeof(script), "gpt %s\n", dev);
+  int err = console_run_script_locked(NULL, script);
+  if (err != NO_ERROR) {
+    return err;
+  }
+
+  EfiStatus bootctrl_status = bootctrl_mark_boot_attempt();
+  if (bootctrl_status != EFI_STATUS_SUCCESS) {
+    printf("Warning: failed to mark A/B boot attempt: %lu\n",
+           static_cast<unsigned long>(bootctrl_status));
+  }
+
+  snprintf(script, sizeof(script),
+           "mount %s /android_esp fat\n"
+           "uefi_load %s\n",
+           part, efi);
+  return console_run_script_locked(NULL, script);
+}
+
 int cmd_uefi_snp_server(int argc, const console_cmd_args *argv) {
   const char *dev = argc > 1 ? argv[1].str : "mmc0";
   const char *part = argc > 2 ? argv[2].str : "mmc0p15";
@@ -290,6 +315,7 @@ int cmd_uefi_list_variable(int argc, const console_cmd_args *argv) {
 
 STATIC_COMMAND_START
 STATIC_COMMAND("uefi_load", "load UEFI application and run it", &cmd_uefi_load)
+STATIC_COMMAND("gbl", "probe GPT, mount ESP, and load GBL.EFI", &cmd_uefi_gbl)
 STATIC_COMMAND("snp_server", "SnpServerTest.efi", &cmd_uefi_snp_server)
 STATIC_COMMAND("uefi_set_var", "set UEFI variable", &cmd_uefi_set_variable)
 STATIC_COMMAND("uefi_list_var", "list UEFI variable", &cmd_uefi_list_variable)

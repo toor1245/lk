@@ -20,6 +20,7 @@
 
 #include <arch/defines.h>
 #include <uefi/protocols/gbl_efi_avb_protocol.h>
+#include <uefi/protocols/gbl_efi_boot_control_protocol.h>
 #include <uefi/protocols/gbl_efi_boot_memory_protocol.h>
 #include <uefi/protocols/gbl_efi_image_loading_protocol.h>
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
@@ -95,6 +96,10 @@ EfiStatus open_efi_erase_block_protocol(EfiHandle handle, const void** intf);
 GblEfiBootMemoryProtocol* open_boot_memory_protocol();
 
 GblEfiAvbProtocol* open_gbl_efi_avb_protocol();
+
+GblEfiBootControlProtocol* open_gbl_efi_boot_control_protocol();
+
+EfiStatus bootctrl_mark_boot_attempt();
 
 EfiRngProtocol* open_efi_rng_protocol();
 
