@@ -95,7 +95,7 @@ struct tee_driver_ops {
     int (*open_session)(struct tee_device *dev,
                         struct tee_open_session_data *data,
                         struct tee_session_imp **session);
-    int (*close_session)(struct tee_device *dev);
+    int (*close_session)(struct tee_device *dev, struct tee_session_imp *session);
     int (*invoke_cmd)(struct tee_device *dev, struct tee_invoke_cmd_data *data);
     int (*shm_alloc)(struct tee_device *dev, size_t size, struct tee_shm **shm);
     int (*shm_free)(struct tee_device *dev, struct tee_shm *shm);

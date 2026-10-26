@@ -654,6 +654,38 @@ out:
     return err;
 }
 
+static int optee_ffa_close_session(struct tee_device *dev,
+                                   struct tee_session_imp *session) {
+    struct tee_shm *shm = NULL;
+    int err = dev->ops->shm_alloc(dev, PAGE_SIZE, &shm);
+    if (err)
+        return err;
+
+    struct optee_ffa_shm *ffa_shm = (struct optee_ffa_shm *)shm->priv;
+
+    struct optee_msg_arg *arg = (struct optee_msg_arg *)shm->addr;
+    memset(arg, 0, PAGE_SIZE);
+
+    arg->cmd = OPTEE_MSG_CMD_CLOSE_SESSION;
+    arg->session = session->session_id;
+    arg->num_params = 0;
+
+    struct optee_ffa_call_data call_data = {
+        .cmd = OPTEE_FFA_YIELDING_CALL_WITH_ARG,
+        .w4  = (uint32_t)ffa_shm->handle,
+        .w5  = 0,
+        .w6  = 0,
+    };
+
+    err = optee_ffa_yielding_call_with_arg(dev, &call_data, arg);
+    if (err == TEE_SUCCESS && arg->ret != TEE_SUCCESS)
+        err = arg->ret;
+
+    (void)dev->ops->shm_free(dev, shm);
+
+    return err;
+}
+
 int optee_ffa_invoke_cmd(struct tee_device *dev, struct tee_invoke_cmd_data *data) {
     struct tee_shm *shm = NULL;
     int err = dev->ops->shm_alloc(dev, PAGE_SIZE, &shm);
@@ -770,6 +802,7 @@ static int optee_ffa_shm_free(struct tee_device *dev, struct tee_shm *shm) {
 static const struct tee_driver_ops optee_ffa_ops = {
     .init_context = optee_ffa_init_context,
     .open_session = optee_ffa_open_session,
+    .close_session = optee_ffa_close_session,
     .invoke_cmd = optee_ffa_invoke_cmd,
     .shm_alloc = optee_ffa_shm_alloc,
     .shm_free = optee_ffa_shm_free,
