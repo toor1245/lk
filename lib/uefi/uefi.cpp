@@ -24,6 +24,7 @@
 #include <lk/debug.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <malloc.h>
 #include <platform.h>
 #include <stdio.h>
 #include <string.h>
@@ -216,10 +217,16 @@ int load_sections_and_execute(ImageReader *reader,
   setup_debug_support(table, image_base, virtual_size, path, &root);
 
   constexpr size_t kStackSize = 1 * 1024ul * 1024;
-  auto stack = reinterpret_cast<char *>(alloc_page(kStackSize, 23));
+  // Must be mapped in the kernel aspace: context switches push onto it after ttbr0 changes.
+  auto stack = reinterpret_cast<char *>(memalign(PAGE_SIZE, kStackSize));
+  if (stack == nullptr) {
+    printf("Failed to allocate %zu byte stack for uefi application\n",
+           kStackSize);
+    return ERR_NO_MEMORY;
+  }
   memset(stack, 0, kStackSize);
   DEFER {
-    free_pages(stack, kStackSize / PAGE_SIZE);
+    free(stack);
     stack = nullptr;
   };
   printf("Calling kernel with stack [%p, %p]\n", stack, stack + kStackSize - 1);
