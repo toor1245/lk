@@ -23,8 +23,11 @@
 #include <dev/rpmb.h>
 
 #include <lk/err.h>
+#include <lk/trace.h>
 #include <lk/init.h>
 #include <lk/list.h>
+
+#define LOCAL_TRACE 0
 
 #define OPTEE_FFA_UUID_0 0xe0786148
 #define OPTEE_FFA_UUID_1 0xe311f8e7
@@ -71,11 +74,6 @@ static struct tee_shm *optee_ffa_find_shm(struct optee_ffa_info *optee_ffa, ffa_
     return NULL;
 }
 
-/*
- * Resolve an OPTEE_MSG fmem parameter received from secure world to a
- * local buffer address, or NULL if the reference is unknown or out of
- * bounds. The buffer size is given by mp->u.fmem.size.
- */
 static void *optee_ffa_fmem_buffer(struct optee_ffa_info *optee_ffa,
                                    const struct optee_msg_param *mp) {
     if (mp->u.fmem.global_id == OPTEE_MSG_FMEM_INVALID_GLOBAL_ID)
@@ -224,7 +222,7 @@ static void optee_ffa_dump_optee_msg_arg(struct optee_msg_arg *arg) {
 }
 
 static void handle_rpc_shm_alloc(struct tee_device *dev, struct optee_msg_arg *arg) {
-    printf("OPTEE_RPC_CMD_SHM_ALLOC called\n");
+    LTRACEF("OPTEE_RPC_CMD_SHM_ALLOC\n");
 
     if (arg->num_params != 1 ||
         arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_INPUT) {
@@ -262,7 +260,7 @@ static void handle_rpc_shm_alloc(struct tee_device *dev, struct optee_msg_arg *a
 static void handle_rpc_shm_free(struct tee_device *dev, struct optee_msg_arg *arg) {
     struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
 
-    printf("OPTEE_RPC_CMD_SHM_FREE called\n");
+    LTRACEF("OPTEE_RPC_CMD_SHM_FREE\n");
 
     if (arg->num_params != 1 ||
         arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_INPUT) {
@@ -287,7 +285,7 @@ static void handle_rpc_shm_free(struct tee_device *dev, struct optee_msg_arg *ar
 static void handle_rpc_rpmb_reset(struct tee_device *dev, struct optee_msg_arg *arg) {
     struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
 
-    printf("OPTEE_RPC_CMD_RPMB_PROBE_RESET called\n");
+    LTRACEF("OPTEE_RPC_CMD_RPMB_PROBE_RESET\n");
 
     if (arg->num_params != 1) {
         printf("Invalid number of parameters for OPTEE_RPC_CMD_RPMB_PROBE_RESET: %u\n",
@@ -318,7 +316,7 @@ static void handle_rpc_rpmb_reset(struct tee_device *dev, struct optee_msg_arg *
 static void handle_rpc_rpmb_next(struct tee_device *dev, struct optee_msg_arg *arg) {
     struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
 
-    printf("OPTEE_RPC_CMD_RPMB_PROBE_NEXT called\n");
+    LTRACEF("OPTEE_RPC_CMD_RPMB_PROBE_NEXT\n");
 
     if (arg->num_params != 2 ||
         arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_OUTPUT ||
@@ -372,7 +370,7 @@ static void handle_rpc_rpmb_next(struct tee_device *dev, struct optee_msg_arg *a
 static void handle_rpc_rpmb_frames(struct tee_device *dev, struct optee_msg_arg *arg) {
     struct optee_ffa_info *optee_ffa = (struct optee_ffa_info*) dev->priv;
 
-    printf("OPTEE_RPC_CMD_RPMB_FRAMES called\n");
+    LTRACEF("OPTEE_RPC_CMD_RPMB_FRAMES\n");
 
     struct rpmb_dev *rpmb_dev = optee_ffa->rpmb_dev;
     if (rpmb_dev == NULL) {
@@ -410,7 +408,9 @@ static void handle_rpc_rpmb_frames(struct tee_device *dev, struct optee_msg_arg 
 }
 
 static void optee_ffa_handle_rpc(struct tee_device *dev, struct optee_msg_arg *arg) {
-    optee_ffa_dump_optee_msg_arg(arg);
+    if (LOCAL_TRACE) {
+        optee_ffa_dump_optee_msg_arg(arg);
+    }
 
     switch (arg->cmd) {
         case OPTEE_RPC_CMD_SHM_ALLOC:
@@ -491,7 +491,7 @@ static int optee_ffa_yielding_call_with_arg(struct tee_device *dev,
 
         switch (payload.arg4) {
             case OPTEE_FFA_YIELDING_CALL_RETURN_RPC_CMD:
-                printf("OPTEE_FFA_YIELDING_CALL_RETURN_RPC_CMD started\n");
+                LTRACEF("RPC from OP-TEE\n");
 
                 size_t rpc_arg_offs = OPTEE_MSG_GET_ARG_SIZE(arg->num_params);
                 struct optee_msg_arg *rpc_arg = (struct optee_msg_arg *)((uint8_t *)arg + rpc_arg_offs);
@@ -629,8 +629,9 @@ static int optee_ffa_open_session(struct tee_device *dev,
     if (err != TEE_SUCCESS)
         goto out;
 
-    printf("OP-TEE Internal Result: 0x%x\n", arg->ret);
-    printf("OP-TEE Internal Origin: 0x%x\n", arg->ret_origin);
+    if (arg->ret != TEE_SUCCESS) {
+        printf("OP-TEE: %s returned 0x%x (origin 0x%x)\n", __func__, arg->ret, arg->ret_origin);
+    }
 
     data->session_id = arg->session;
     data->ret_origin = arg->ret_origin;
@@ -718,8 +719,9 @@ int optee_ffa_invoke_cmd(struct tee_device *dev, struct tee_invoke_cmd_data *dat
     if (err != TEE_SUCCESS)
         goto out;
 
-    printf("OP-TEE Internal Result: 0x%x\n", arg->ret);
-    printf("OP-TEE Internal Origin: 0x%x\n", arg->ret_origin);
+    if (arg->ret != TEE_SUCCESS) {
+        printf("OP-TEE: %s returned 0x%x (origin 0x%x)\n", __func__, arg->ret, arg->ret_origin);
+    }
 
     if (data->operation != NULL) {
         optee_ffa_unpack_params(data->operation, arg->params);
