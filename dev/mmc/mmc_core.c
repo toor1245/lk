@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <endian.h>
 
 #include <lk/debug.h>
 #include <lk/init.h>
@@ -276,7 +277,8 @@ static status_t mmc_all_send_cid(struct mmc_device *mmc_dev) {
     }
 
     parse_cid(cmd.resp, &mmc_dev->cid);
-    memcpy(mmc_dev->raw_cid, cmd.resp, sizeof(mmc_dev->raw_cid));
+    for (size_t i = 0; i < countof(mmc_dev->raw_cid); i++)
+        mmc_dev->raw_cid[i] = BE32(cmd.resp[i]);
 
     return err;
 }

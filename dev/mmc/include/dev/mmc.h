@@ -100,7 +100,7 @@ struct mmc_device {
     bdev_t bdev;
     const char *name;
     struct mmc_cid cid;
-    /* Raw CID response words, kept for RPMB device identification */
+    /* CID as big-endian words */
     uint32_t raw_cid[4];
     struct mmc_csd csd;
     struct mmc_ext_csd ext_csd;
