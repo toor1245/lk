@@ -49,6 +49,8 @@ bool invoke_callback(EfiEventImpl *ev) {
             ev->notify_fn, ev->notify_ctx, get_current_thread()->name);
     backoff_wait_time = 0;
     ev->notify_fn(ev, ev->notify_ctx);
+    event_unsignal(&ev->ev);
+    ev->callback_called = false;
     return true;
   }
   return false;
@@ -67,14 +69,18 @@ void process_pending_events() {
 
   struct list_node completed_events = LIST_INITIAL_VALUE(completed_events);
   list_for_every_entry_safe(&pending_events, ev, tmp_ev, EfiEventImpl, node) {
-    if (ev->ready()) {
+    if (ev->ready() && (ev->type & EFI_EVENT_TYPE_NOTIFY_SIGNAL) &&
+        ev->notify_fn != nullptr && !ev->callback_called) {
       delete_if_in_list(ev, &al);
       list_add_tail(&completed_events, &ev->node);
     }
   }
   al.release();
-  list_for_every_entry(&completed_events, ev, EfiEventImpl, node) {
+  list_for_every_entry_safe(&completed_events, ev, tmp_ev, EfiEventImpl, node) {
+    list_delete(&ev->node);
     invoke_callback(ev);
+    AutoLock al2{&event_list_mutex};
+    list_add_tail(&pending_events, &ev->node);
   }
 }
 
@@ -82,28 +88,30 @@ void process_pending_events() {
 
 EfiStatus wait_for_event(size_t num_events, EfiEvent *event, size_t *index) {
   LTRACEF("waiting for %zu events\n", num_events);
+  if (num_events == 0 || event == nullptr || index == nullptr) {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
   for (size_t i = 0; i < num_events; i++) {
     EfiEventImpl *ev = reinterpret_cast<EfiEventImpl *>(event[i]);
-    if (ev->ready()) {
-      *index = i;
-      return EFI_STATUS_SUCCESS;
+    // NOTIFY_SIGNAL events may not be waited on.
+    if (ev->type & EFI_EVENT_TYPE_NOTIFY_SIGNAL) {
+      return EFI_STATUS_INVALID_PARAMETER;
     }
   }
   while (true) {
-    // LK currently does not support waiting for multiple events.
-    // So we just have to wait for each event in a poll fashion.
     for (size_t i = 0; i < num_events; i++) {
       EfiEventImpl *ev = reinterpret_cast<EfiEventImpl *>(event[i]);
+      if (!ev->ready() && (ev->type & EFI_EVENT_TYPE_NOTIFY_WAIT)) {
+        ev->notify_fn(ev, ev->notify_ctx);
+      }
       if (ev->ready()) {
+        event_unsignal(&ev->ev);
         *index = i;
         return EFI_STATUS_SUCCESS;
       }
-      auto status = event_wait_timeout(&ev->ev, 200);
-      if (status == ERR_TIMED_OUT) {
-        continue;
-      }
-      return EFI_STATUS_SUCCESS;
     }
+    EfiEventImpl *ev = reinterpret_cast<EfiEventImpl *>(event[0]);
+    event_wait_timeout(&ev->ev, 10);
   }
   return EFI_STATUS_NOT_READY;
 }
@@ -116,7 +124,7 @@ EfiStatus signal_event(EfiEvent e) {
   // we can't switch thread context, so any blocking APIs such as malloc/free
   // mutexes, etc. are not allowed.
   if (event->ready()) {
-    printf("Event %p already signaled\n", event);
+    LTRACEF("Event %p already signaled\n", event);
     return EFI_STATUS_SUCCESS;
   }
   event_signal(&event->ev, !arch_ints_disabled());
@@ -134,10 +142,6 @@ EfiStatus signal_event(EfiEvent e) {
           event->creator_thread->name);
       return EFI_STATUS_SUCCESS;
     }
-    // this is only possible in non-interrupt context, as this requires mutexes.
-    AutoLock al{&event_list_mutex};
-    delete_if_in_list(event, &al);
-    al.release();
     invoke_callback(event);
   }
   return EFI_STATUS_SUCCESS;
@@ -147,10 +151,6 @@ EfiStatus create_event(EfiEventType type, EfiTpl notify_tpl,
                        EfiEventNotify notify_fn, void *notify_ctx,
                        EfiEvent *event) {
   process_pending_events();
-  if (type & EFI_EVENT_TYPE_TIMER) {
-    printf("Creating timer event is not supported yet\n");
-    return EFI_STATUS_UNSUPPORTED;
-  }
   if (type == EFI_EVENT_TYPE_SIGNAL_EXIT_BOOT_SERVICES ||
       type == EFI_EVENT_TYPE_SIGNAL_VIRTUAL_ADDRESS_CHANGE) {
     printf(
@@ -159,14 +159,15 @@ EfiStatus create_event(EfiEventType type, EfiTpl notify_tpl,
         type);
     return EFI_STATUS_UNSUPPORTED;
   }
-  if (type & EFI_EVENT_TYPE_NOTIFY_WAIT) {
-    printf("Creating NOTIFY_WAIT event is not supported yet\n");
-    return EFI_STATUS_UNSUPPORTED;
+  if ((type & EFI_EVENT_TYPE_NOTIFY_WAIT) &&
+      ((type & EFI_EVENT_TYPE_NOTIFY_SIGNAL) || notify_fn == nullptr)) {
+    return EFI_STATUS_INVALID_PARAMETER;
   }
   auto ev = reinterpret_cast<EfiEventImpl *>(malloc(sizeof(EfiEventImpl)));
   memset(ev, 0, sizeof(EfiEventImpl));
   ev->type = type;
   event_init(&ev->ev, false, 0);
+  timer_initialize(&ev->timer);
   ev->notify_ctx = notify_ctx;
   ev->notify_fn = notify_fn;
   ev->creator_thread = get_current_thread();
@@ -203,11 +204,14 @@ EfiStatus check_event(EfiEvent e) {
     }
     return EFI_STATUS_INVALID_PARAMETER;
   }
+  if (!event->ready() && (event->type & EFI_EVENT_TYPE_NOTIFY_WAIT)) {
+    event->notify_fn(event, event->notify_ctx);
+  }
   if (event->ready()) {
-    AutoLock al{&event_list_mutex};
-    delete_if_in_list(event, &al);
-    al.release();
-    invoke_callback(event);
+    if (event->type & EFI_EVENT_TYPE_NOTIFY_SIGNAL) {
+      invoke_callback(event);
+    }
+    event_unsignal(&event->ev);
     return EFI_STATUS_SUCCESS;
   }
   return EFI_STATUS_NOT_READY;
@@ -215,6 +219,7 @@ EfiStatus check_event(EfiEvent e) {
 
 EfiStatus close_event(EfiEvent e) {
   auto event = reinterpret_cast<EfiEventImpl *>(e);
+  timer_cancel(&event->timer);
   AutoLock al{&event_list_mutex};
   delete_if_in_list(event, &al);
   al.release();
@@ -223,7 +228,61 @@ EfiStatus close_event(EfiEvent e) {
   return EFI_STATUS_SUCCESS;
 }
 
-EfiStatus set_timer(EfiEvent event, EfiTimerDelay type, uint64_t trigger_time) {
-  printf("%s is unsupported\n", __FUNCTION__);
-  return EFI_STATUS_UNSUPPORTED;
+void close_events_in_range(const void *start, size_t size) {
+  const auto begin = reinterpret_cast<uintptr_t>(start);
+  const auto end = begin + size;
+
+  for (;;) {
+    EfiEventImpl *victim = nullptr;
+    {
+      AutoLock al{&event_list_mutex};
+      EfiEventImpl *ev = nullptr;
+      list_for_every_entry(&pending_events, ev, EfiEventImpl, node) {
+        const auto fn = reinterpret_cast<uintptr_t>(ev->notify_fn);
+        if (fn >= begin && fn < end) {
+          victim = ev;
+          break;
+        }
+      }
+    }
+    if (victim == nullptr) {
+      return;
+    }
+    LTRACEF("Closing image owned event %p callback %p\n", victim,
+            victim->notify_fn);
+    // close_event takes event_list_mutex itself, so it must not be held here.
+    close_event(victim);
+  }
+}
+
+namespace {
+enum handler_return timer_expired(timer_t *t, lk_time_t now, void *arg) {
+  // Runs in interrupt context; signal_event is IRQ-safe.
+  signal_event(static_cast<EfiEventImpl *>(arg));
+  return INT_RESCHEDULE;
+}
+}  // namespace
+
+EfiStatus set_timer(EfiEvent e, EfiTimerDelay type, uint64_t trigger_time) {
+  auto event = reinterpret_cast<EfiEventImpl *>(e);
+  if (event == nullptr || !(event->type & EFI_EVENT_TYPE_TIMER)) {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+  timer_cancel(&event->timer);
+  if (type == EFI_TIMER_DELAY_TIMER_CANCEL) {
+    return EFI_STATUS_SUCCESS;
+  }
+  // trigger_time is in 100 ns units.
+  lk_time_t ms = static_cast<lk_time_t>((trigger_time + 9999) / 10000);
+  if (ms == 0) {
+    ms = 1;
+  }
+  if (type == EFI_TIMER_DELAY_TIMER_PERIODIC) {
+    timer_set_periodic(&event->timer, ms, timer_expired, event);
+  } else if (type == EFI_TIMER_DELAY_TIMER_RELATIVE) {
+    timer_set_oneshot(&event->timer, ms, timer_expired, event);
+  } else {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+  return EFI_STATUS_SUCCESS;
 }

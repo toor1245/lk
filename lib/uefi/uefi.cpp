@@ -38,6 +38,7 @@
 #include "charset.h"
 #include "configuration_table.h"
 #include "debug_support.h"
+#include "events.h"
 #include "defer.h"
 #include "memory_protocols.h"
 #include "pe.h"
@@ -233,6 +234,7 @@ int load_sections_and_execute(ImageReader *reader,
   int ret = static_cast<int>(
       call_with_stack(stack + kStackSize, entry, const_cast<void*>(root), &table));
 
+  close_events_in_range(image_base, virtual_size);
   teardown_debug_support(image_base);
 
   return ret;

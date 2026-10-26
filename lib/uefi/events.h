@@ -19,6 +19,7 @@
 #define __LIB_UEFI_EVENTS_H_
 #include <kernel/event.h>
 #include <kernel/thread.h>
+#include <kernel/timer.h>
 #include <lk/list.h>
 #include <uefi/types.h>
 
@@ -29,6 +30,7 @@ struct EfiEventImpl final {
   void *notify_ctx = nullptr;
   volatile bool callback_called = false;
   thread_t *creator_thread = nullptr;
+  timer_t timer;
   bool ready() const { return ev.signaled; }
   struct list_node node;
 };
@@ -45,6 +47,8 @@ EfiStatus create_event(EfiEventType type, EfiTpl notify_tpl,
                        EfiEvent *event);
 
 EfiStatus close_event(EfiEvent event);
+
+void close_events_in_range(const void *start, size_t size);
 
 EfiStatus set_timer(EfiEvent event, EfiTimerDelay type, uint64_t trigger_time);
 
