@@ -24,6 +24,7 @@
 #include <libfdt.h>
 #include <lk/err.h>
 #include <lk/trace.h>
+#include <platform.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <uefi/protocols/erase_block_protocol.h>
@@ -170,11 +171,14 @@ EfiStatus erase_blocks(EfiEraseBlockProtocol* self, uint32_t media_id,
     return EFI_STATUS_INVALID_PARAMETER;
   }
 
+  printf("Erasing %s: %zu MiB from lba %llu...\n", dev->name, size >> 20, lba);
+  lk_time_t start = current_time();
   ssize_t ret = bio_erase(dev, lba * dev->block_size, size);
   if (ret < 0) {
     LTRACEF("bio_erase failed ret=%zd\n", ret);
     return EFI_STATUS_DEVICE_ERROR;
   }
+  printf("Erased %s in %u ms\n", dev->name, current_time() - start);
   return EFI_STATUS_SUCCESS;
 }
 
