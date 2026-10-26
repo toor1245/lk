@@ -43,6 +43,8 @@ static const char *guid_to_string(const EfiGuid *g) {
     return "EFI_GBL_OS_CONFIGURATION_PROTOCOL";
   if (guid_eq(g, EFI_GBL_EFI_IMAGE_LOADING_PROTOCOL_GUID))
     return "EFI_GBL_EFI_IMAGE_LOADING_PROTOCOL";
+  if (guid_eq(g, EFI_GBL_EFI_AVB_PROTOCOL_GUID))
+    return "EFI_GBL_EFI_AVB_PROTOCOL";
   if (guid_eq(g, EFI_GBL_EFI_BOOT_CONTROL_PROTOCOL_GUID))
     return "EFI_GBL_EFI_BOOT_CONTROL_PROTOCOL";
   if (guid_eq(g, EFI_GBL_EFI_FASTBOOT_PROTOCOL_GUID))

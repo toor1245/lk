@@ -11,6 +11,7 @@ MODULE_INCLUDES += \
 
 MODULE_DEPS += \
 	lib/libcpp \
+	lib/gpapi \
 	lib/cbuf \
 	lib/minip \
 
@@ -35,6 +36,8 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/unicode_collation.cpp \
 	$(LOCAL_DIR)/dt_fixup_protocol.cpp \
 	$(LOCAL_DIR)/network_protocol.cpp \
+	$(LOCAL_DIR)/gbl_efi_avb_protocol.cpp \
+	$(LOCAL_DIR)/ta_avb_client.cpp \
 	$(LOCAL_DIR)/gbl_efi_os_configuration_protocol.cpp \
 
 include make/module.mk

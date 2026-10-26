@@ -121,6 +121,12 @@ static constexpr auto EFI_GBL_EFI_FASTBOOT_TRANSPORT_PROTOCOL_GUID =
             0x440d,
             {0x84, 0x9c, 0xe2, 0xa0, 0xc7, 0xe5, 0x51, 0x43}};
 
+static constexpr auto EFI_GBL_EFI_AVB_PROTOCOL_GUID =
+    EfiGuid{0x6bc66b9a,
+            0xd5c9,
+            0x4c02,
+            {0x9d, 0xa9, 0x50, 0xaf, 0x19, 0x8d, 0x91, 0x2c}};
+
 static constexpr auto EFI_DT_FIXUP_PROTOCOL_GUID =
     EfiGuid{0xe617d64c,
             0xfe08,

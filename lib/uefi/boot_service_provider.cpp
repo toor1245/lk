@@ -317,6 +317,12 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
       return EFI_STATUS_OUT_OF_RESOURCES;
     }
     return EFI_STATUS_SUCCESS;
+  } else if (guid_eq(protocol, EFI_GBL_EFI_AVB_PROTOCOL_GUID)) {
+    *intf = open_gbl_efi_avb_protocol();
+    if (*intf == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_RNG_PROTOCOL_GUID)) {
     *intf = open_efi_rng_protocol();
     if (*intf == nullptr) {
