@@ -22,6 +22,7 @@
 #include <uefi/protocols/gbl_efi_avb_protocol.h>
 #include <uefi/protocols/gbl_efi_boot_control_protocol.h>
 #include <uefi/protocols/gbl_efi_boot_memory_protocol.h>
+#include <uefi/protocols/gbl_efi_fastboot_protocol.h>
 #include <uefi/protocols/gbl_efi_image_loading_protocol.h>
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
 #include <uefi/protocols/random_number_generator_protocol.h>
@@ -100,6 +101,8 @@ GblEfiAvbProtocol* open_gbl_efi_avb_protocol();
 GblEfiBootControlProtocol* open_gbl_efi_boot_control_protocol();
 
 EfiStatus bootctrl_mark_boot_attempt();
+
+GblEfiFastbootProtocol* open_gbl_efi_fastboot_protocol();
 
 EfiRngProtocol* open_efi_rng_protocol();
 

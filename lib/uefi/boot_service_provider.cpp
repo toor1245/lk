@@ -347,6 +347,12 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
       return EFI_STATUS_OUT_OF_RESOURCES;
     }
     return EFI_STATUS_SUCCESS;
+  } else if (guid_eq(protocol, EFI_GBL_EFI_FASTBOOT_PROTOCOL_GUID)) {
+    *intf = open_gbl_efi_fastboot_protocol();
+    if (*intf == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
   }
   return EFI_STATUS_UNSUPPORTED;
 }

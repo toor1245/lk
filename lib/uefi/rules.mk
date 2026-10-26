@@ -38,6 +38,7 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/network_protocol.cpp \
 	$(LOCAL_DIR)/gbl_efi_avb_protocol.cpp \
 	$(LOCAL_DIR)/ta_avb_client.cpp \
+	$(LOCAL_DIR)/gbl_efi_fastboot_protocol.cpp \
 	$(LOCAL_DIR)/gbl_efi_os_configuration_protocol.cpp \
 	$(LOCAL_DIR)/gbl_efi_boot_control_protocol.cpp \
 

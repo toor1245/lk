@@ -318,6 +318,13 @@ EfiStatus get_boot_buffer(struct GblEfiBootMemoryProtocol* self,
       return EFI_STATUS_OUT_OF_RESOURCES;
     }
     return EFI_STATUS_SUCCESS;
+  } else if (buf_type == GBL_EFI_BOOT_BUFFER_TYPE_FASTBOOT_DOWNLOAD) {
+    *size = 112ul * 1024 * 1024;
+    *addr = alloc_page(*size, PAGE_SIZE_SHIFT);
+    if (*addr == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
   }
   printf("get_boot_buffer(%d, %zu) unsupported\n", buf_type, *size);
   return EFI_STATUS_NOT_FOUND;
