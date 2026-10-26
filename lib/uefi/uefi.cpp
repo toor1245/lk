@@ -196,6 +196,7 @@ int load_sections_and_execute(ImageReader *reader,
   table.header.revision = 2 << 16;
   EfiSimpleTextOutputProtocol console_out = get_text_output_protocol();
   table.con_out = &console_out;
+  table.con_in = setup_text_input_protocol();
   auto configuration_table =
       reinterpret_cast<EfiConfigurationTable *>(alloc_page(PAGE_SIZE));
   table.configuration_table = configuration_table;

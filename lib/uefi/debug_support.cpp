@@ -30,6 +30,7 @@
 #include "uefi_platform.h"
 #include "boot_service_provider.h"
 #include "unicode_collation.h"
+#include "text_protocol.h"
 
 struct EFI_DEVICE_PATH_FILE_PATH_PROTOCOL {
   EfiDevicePathProtocol dp;
@@ -215,6 +216,8 @@ EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
     open_boot_memory_protocol(),
     &EFI_DT_FIXUP_PROTOCOL_GUID,
     &dtFixupProtocol,
+    &EFI_TEXT_INPUT_PROTOCOL_GUID,
+    setup_text_input_protocol(),
     nullptr
   );
 }

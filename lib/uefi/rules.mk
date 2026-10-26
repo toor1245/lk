@@ -11,6 +11,7 @@ MODULE_INCLUDES += \
 
 MODULE_DEPS += \
 	lib/libcpp \
+	lib/cbuf \
 
 MODULE_SRCS += \
 	$(LOCAL_DIR)/uefi.cpp \

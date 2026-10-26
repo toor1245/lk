@@ -41,6 +41,7 @@
 #include "uefi_platform.h"
 #include "log.h"
 #include "guid.h"
+#include "text_protocol.h"
 #include "efi_internal.h"
 
 namespace {
@@ -328,6 +329,12 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
     return open_efi_erase_block_protocol(handle, intf);
   } else if (guid_eq(protocol, EFI_BOOT_MEMORY_PROTOCOL_GUID)) {
     *intf = open_boot_memory_protocol();
+    if (*intf == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
+  } else if (guid_eq(protocol, EFI_TEXT_INPUT_PROTOCOL_GUID)) {
+    *intf = open_text_input_protocol();
     if (*intf == nullptr) {
       return EFI_STATUS_OUT_OF_RESOURCES;
     }

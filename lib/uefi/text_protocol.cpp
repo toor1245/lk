@@ -16,7 +16,25 @@
  */
 
 #include "text_protocol.h"
+
+#include <lib/cbuf.h>
+#include <lib/io.h>
+#include <platform/debug.h>
 #include <stdio.h>
+
+#include "events.h"
+
+namespace {
+
+int console_read_char(char *c) {
+#if CONSOLE_HAS_INPUT_BUFFER
+  return cbuf_read_char(&console_input_cbuf, c, false) == 1 ? 0 : -1;
+#else
+  return platform_dgetc(c, false);
+#endif
+}
+
+}  // namespace
 
 EfiStatus output_string(struct EfiSimpleTextOutputProtocol *self,
                         uint16_t *string) {
@@ -39,4 +57,66 @@ EfiSimpleTextOutputProtocol get_text_output_protocol() {
   EfiSimpleTextOutputProtocol console_out;
   console_out.output_string = output_string;
   return console_out;
+}
+
+namespace {
+
+cbuf_t key_buf;
+
+void wait_for_key_notify(EfiEvent event, void *) {
+  char c;
+  bool got_key = false;
+  while (console_read_char(&c) == 0) {
+    cbuf_write_char(&key_buf, c, false);
+    got_key = true;
+  }
+  if (got_key || cbuf_space_used(&key_buf) > 0) {
+    signal_event(event);
+  }
+}
+
+}  // namespace
+
+EfiStatus read_key_stroke(struct EfiSimpleTextInputProtocol *self,
+                          EfiInputKey *key) {
+  char c;
+  if (cbuf_read_char(&key_buf, &c, false) != 1 &&
+      console_read_char(&c) != 0) {
+    return EFI_STATUS_NOT_READY;
+  }
+  key->scan_code = 0;
+  if (c == '\n') {
+    c = '\r';
+  }
+  key->unicode_char = static_cast<unsigned char>(c);
+  return EFI_STATUS_SUCCESS;
+}
+
+EfiStatus reset_input(struct EfiSimpleTextInputProtocol *self,
+                      bool extended_verification) {
+  char c;
+  while (cbuf_read_char(&key_buf, &c, false) == 1) {
+  }
+  while (console_read_char(&c) == 0) {
+  }
+  return EFI_STATUS_SUCCESS;
+}
+
+static EfiSimpleTextInputProtocol console_in = {
+    .reset = reset_input,
+    .read_key_stroke = read_key_stroke,
+    .wait_for_key = nullptr,
+};
+
+EfiSimpleTextInputProtocol *setup_text_input_protocol() {
+  if (console_in.wait_for_key == nullptr) {
+    cbuf_initialize(&key_buf, 128);
+    create_event(EFI_EVENT_TYPE_NOTIFY_WAIT, 0, wait_for_key_notify, nullptr,
+                 &console_in.wait_for_key);
+  }
+  return &console_in;
+}
+
+EfiSimpleTextInputProtocol *open_text_input_protocol() {
+  return &console_in;
 }

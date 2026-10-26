@@ -19,9 +19,13 @@
 #define __TEXT_PROTOCOL_H__
 
 #include <uefi/protocols/simple_text_output_protocol.h>
+#include <uefi/protocols/simple_text_input_protocol.h>
 
 EfiSimpleTextOutputProtocol get_text_output_protocol();
 EfiStatus output_string(struct EfiSimpleTextOutputProtocol *self,
                         char16_t *string);
+
+EfiSimpleTextInputProtocol *setup_text_input_protocol();
+EfiSimpleTextInputProtocol *open_text_input_protocol();
 
 #endif
