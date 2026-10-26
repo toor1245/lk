@@ -15,21 +15,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ta_avb.h>
 #include <tee_client_api.h>
 
-/* AVB UUID 023f8f1a-292a-432b-8fc4-de8471358067 */
-#define TA_AVB_UUID { 0x1a8f3f02, 0x2a29, 0x2b43, \
-        { 0x8f, 0xc4, 0xde, 0x84, 0x71, 0x35, 0x80, 0x67} }
-
-#define TA_AVB_CMD_READ_ROLLBACK_INDEX  0
-#define TA_AVB_CMD_WRITE_ROLLBACK_INDEX 1
-#define TA_AVB_CMD_READ_LOCK_STATE      2
-#define TA_AVB_CMD_WRITE_LOCK_STATE     3
-#define TA_AVB_CMD_READ_PERSIST_VALUE   4
-#define TA_AVB_CMD_WRITE_PERSIST_VALUE  5
-
 static int do_avb_test(void) {
-TEEC_Context ctx;
+    TEEC_Context ctx;
     TEEC_Session sess;
     TEEC_Operation op;
     TEEC_Result res;
@@ -77,7 +67,7 @@ TEEC_Context ctx;
 
     printf("\n--- Testing Rollback Index ---\n");
     uint32_t slot = 0;
-    uint64_t write_idx = 0x123456789ABCDEF0; /* 64-bit test value */
+    uint64_t write_idx = 1;
     
     memset(&op, 0, sizeof(op));
     op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT, TEEC_VALUE_INPUT, TEEC_NONE, TEEC_NONE);
