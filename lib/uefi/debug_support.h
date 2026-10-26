@@ -62,13 +62,14 @@ EfiStatus efi_core_new_debug_image_info_entry(uint32_t image_info_type,
                                               EfiLoadedImageProtocol *loaded_image,
                                               EfiHandle image_handle);
 void efi_core_remove_debug_image_info_entry(EfiHandle image_handle);
+EfiStatus setup_firmware_protocols(EfiSystemTable &table);
 EfiStatus setup_debug_support(EfiSystemTable &table,
 			      char *image_base,
 			      size_t virtual_size,
 			      const char *dev_name,
             EfiHandle *handle);
 
-void teardown_debug_support(char *image_base);
+void teardown_debug_support(EfiHandle image_handle);
 
 extern struct EfiDebugImageInfoTableHeader efi_m_debug_info_table_header;
 

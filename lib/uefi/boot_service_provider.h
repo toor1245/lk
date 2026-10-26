@@ -22,6 +22,11 @@
 
 void setup_boot_service_table(EfiBootService *service);
 
+EfiStatus create_handle(EfiHandle *handle);
+EfiStatus add_protocol(EfiHandle handle, const EfiGuid *protocol, void *intf);
+
+EfiStatus destroy_handle(EfiHandle handle);
+
 static constexpr auto LOADED_IMAGE_PROTOCOL_GUID =
     EfiGuid{0x5b1b31a1,
             0x9562,

@@ -198,12 +198,38 @@ void efi_core_remove_debug_image_info_entry(EfiHandle image_handle)
     ~EFI_DEBUG_IMAGE_INFO_UPDATE_IN_PROGRESS;
 }
 
+static EfiHandle firmware_handle = nullptr;
+
+EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
+  if (firmware_handle != nullptr) {
+    return EFI_STATUS_SUCCESS;
+  }
+
+  return table.boot_services->install_multiple_protocol_interfaces(
+    &firmware_handle,
+    &EFI_UNICODE_COLLATION_PROTOCOL2_GUID,
+    &unicodeCollationProtocol,
+    &EFI_UNICODE_COLLATION_PROTOCOL_GUID,
+    &unicodeCollationProtocol,
+    &EFI_BOOT_MEMORY_PROTOCOL_GUID,
+    open_boot_memory_protocol(),
+    &EFI_DT_FIXUP_PROTOCOL_GUID,
+    &dtFixupProtocol,
+    nullptr
+  );
+}
+
 EfiStatus setup_debug_support(EfiSystemTable &table,
 			      char *image_base,
 			      size_t virtual_size,
 			      const char *dev_name,
             EfiHandle *image_handle) {
   EfiLoadedImageProtocol *efiLoadedImageProtocol = nullptr;
+
+  EfiStatus status = setup_firmware_protocols(table);
+  if (status != EFI_STATUS_SUCCESS) {
+    return status;
+  }
 
   allocate_pool(EFI_MEMORY_TYPE_BOOT_SERVICES_DATA,
 		sizeof(EfiLoadedImageProtocol),
@@ -243,14 +269,6 @@ EfiStatus setup_debug_support(EfiSystemTable &table,
     efiLoadedImageProtocol,
     &EFI_DEVICE_PATH_PROTOCOL_GUID,
     device_buf,
-    &EFI_UNICODE_COLLATION_PROTOCOL2_GUID,
-    &unicodeCollationProtocol,
-    &EFI_UNICODE_COLLATION_PROTOCOL_GUID,
-    &unicodeCollationProtocol,
-    &EFI_BOOT_MEMORY_PROTOCOL_GUID,
-    open_boot_memory_protocol(),
-    &EFI_DT_FIXUP_PROTOCOL_GUID,
-    &dtFixupProtocol,
     nullptr
   );
 
@@ -259,21 +277,34 @@ EfiStatus setup_debug_support(EfiSystemTable &table,
 					     *image_handle);
 }
 
-void teardown_debug_support(char *image_base) {
+void teardown_debug_support(EfiHandle image_handle) {
   union EfiDebugImageInfo *table = efi_m_debug_info_table_header.efi_debug_image_info_table;
 
   for (uint32_t index = 0; index < efi_m_debug_info_table_header.table_size; index++) {
     if (table[index].normal_image &&
-	table[index].normal_image->image_handle == image_base) {
+	table[index].normal_image->image_handle == image_handle) {
       /* Found a match. Get device_buf and efiLoadedImageProtocol. */
       EfiLoadedImageProtocol *efiLoadedImageProtocol = table[index].normal_image->loaded_image_protocol_instance;
       char *device_buf = reinterpret_cast<char *>(efiLoadedImageProtocol->file_path);
       /* Free resources */
-      efi_core_remove_debug_image_info_entry(image_base);
+      efi_core_remove_debug_image_info_entry(image_handle);
       free_pool(device_buf);
       free_pool(efiLoadedImageProtocol);
 
-      return;
+      break;
     }
   }
+
+  if (efi_m_debug_info_table_header.table_size == 0) {
+    free_pool(efi_m_debug_info_table_header.efi_debug_image_info_table);
+    efi_m_debug_info_table_header.efi_debug_image_info_table = nullptr;
+    efi_m_max_table_entries = 0;
+  }
+
+  if (efi_systab_pointer != nullptr) {
+    free_pages(efi_systab_pointer, 1);
+    efi_systab_pointer = nullptr;
+  }
+
+  destroy_handle(image_handle);
 }

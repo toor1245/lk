@@ -215,6 +215,7 @@ int load_sections_and_execute(ImageReader *reader,
   char path[FS_MAX_PATH_LEN];
   reader->get_name(path, sizeof(path));
   path[sizeof(path) - 1] = '\0';
+  root = nullptr;
   setup_debug_support(table, image_base, virtual_size, path, &root);
 
   constexpr size_t kStackSize = 1 * 1024ul * 1024;
@@ -235,7 +236,8 @@ int load_sections_and_execute(ImageReader *reader,
       call_with_stack(stack + kStackSize, entry, const_cast<void*>(root), &table));
 
   close_events_in_range(image_base, virtual_size);
-  teardown_debug_support(image_base);
+  teardown_debug_support(root);
+  root = nullptr;
 
   return ret;
 }
