@@ -181,6 +181,16 @@ struct ffa_device *arm_ffa_get_device(void) {
     return &ffa_dev;
 }
 
+status_t arm_ffa_release_rxtx(struct ffa_device *dev) {
+    if (dev == NULL)
+        return ERR_INVALID_ARGS;
+
+    if (dev->rx_buffer == NULL && dev->tx_buffer == NULL)
+        return NO_ERROR;
+
+    return arm_ffa_unmap_rxtx(dev);
+}
+
 status_t arm_ffa_find_partition_by_uuid(struct ffa_device *dev,
                                         const uint32_t uuid[4],
                                         ffa_partition_info_t *out) {

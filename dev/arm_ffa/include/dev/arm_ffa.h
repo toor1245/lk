@@ -15,6 +15,10 @@
 
 #include <lk/err.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ffa_device {
     uint32_t version;
     ffa_endpoint_id_t endpoint_id;
@@ -33,3 +37,9 @@ status_t arm_ffa_shm_alloc(struct ffa_device *dev,
                            ffa_endpoint_id_t receiver_id, ffa_mem_handle_t *handle,
                            size_t size, void **shm);
 status_t arm_ffa_shm_free(struct ffa_device *dev, ffa_mem_handle_t handle);
+
+status_t arm_ffa_release_rxtx(struct ffa_device *dev);
+
+#ifdef __cplusplus
+}
+#endif
