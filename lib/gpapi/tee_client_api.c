@@ -128,6 +128,11 @@ TEEC_Result TEEC_OpenSession(
     }
 
     *returnOrigin = data.ret_origin;
+    if (data.ret != TEEC_SUCCESS) {
+        free(session_imp);
+        return data.ret;
+    }
+
     session->imp = (void *)session_imp;
 
     return data.ret;
@@ -178,10 +183,23 @@ out_free_operation:
 
 void TEEC_CloseSession(TEEC_Session *session)
 {
+    if (session == NULL || session->imp == NULL)
+        return;
 
+    struct tee_session_imp *session_imp = (struct tee_session_imp *)session->imp;
+    struct tee_device *tee_dev = session_imp->tee_dev;
+
+    (void)tee_dev->ops->close_session(tee_dev, session_imp);
+
+    free(session_imp);
+    session->imp = NULL;
 }
 
 void TEEC_FinalizeContext(TEEC_Context *context)
 {
+    if (context == NULL || context->imp == NULL)
+        return;
 
+    free(context->imp);
+    context->imp = NULL;
 }

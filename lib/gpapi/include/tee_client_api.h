@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef uint32_t TEEC_Result;
 
 #define TEEC_ORIGIN_API                      0x00000001
@@ -223,3 +227,7 @@ TEEC_Result TEEC_InvokeCommand(
 
 void TEEC_RequestCancellation(
     TEEC_Operation *operation);
+
+#ifdef __cplusplus
+}
+#endif
