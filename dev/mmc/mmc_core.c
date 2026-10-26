@@ -27,7 +27,7 @@
 #include <dev/mmc_bdev.h>
 #include <dev/rpmb.h>
 
-#define LOCAL_TRACE 1
+#define LOCAL_TRACE 0
 
 static struct list_node mmc_devices = LIST_INITIAL_VALUE(mmc_devices);
 static uint32_t dev_num = 0;
@@ -570,7 +570,6 @@ static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const void *req,
     struct rpmb_frame *req_frame = (struct rpmb_frame *)req;
 
     uint16_t req_type = BE16(req_frame->req_resp);
-    printf("RPMB req frame type %d\n", req_type);
 
     if (req_len < RPMB_FRAME_SIZE) {
         printf("Invalid request length: %u\n", req_len);
@@ -582,25 +581,25 @@ static status_t mmc_rpmb_route_frames(struct rpmb_dev *rdev, const void *req,
     switch (req_type)
     {
         case RPMB_REQ_PROGRAM_KEY:
-            printf("RPMB: Program key request\n");
+            LTRACEF("Program key request\n");
 
             route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
             break;
 
         case RPMB_REQ_READ_WRITE_COUNTER:
-            printf("RPMB: Read write counter request\n");
+            LTRACEF("Read write counter request\n");
 
             route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
             break;
 
         case RPMB_REQ_AUTH_WRITE:
-            printf("RPMB: Authenticated write request\n");
+            LTRACEF("Authenticated write request\n");
 
             route_err = mmc_rpmb_route_write_req(mmc_dev, req_frame, req_len, resp, resp_len);
             break;
 
         case RPMB_REQ_AUTH_READ:
-            printf("RPMB: Authenticated read request\n");
+            LTRACEF("Authenticated read request\n");
 
             route_err = mmc_rpmb_route_read_req(mmc_dev, req_frame, req_len, resp, resp_len);
             break;
