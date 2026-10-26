@@ -18,6 +18,7 @@
 #include "uefi/uefi.h"
 
 #include <lib/bio.h>
+#include <lib/console.h>
 #include <lib/fs.h>
 #include <lib/heap.h>
 #include <lk/console_cmd.h>
@@ -256,6 +257,19 @@ int cmd_uefi_load(int argc, const console_cmd_args *argv) {
   return 0;
 }
 
+int cmd_uefi_snp_server(int argc, const console_cmd_args *argv) {
+  const char *dev = argc > 1 ? argv[1].str : "mmc0";
+  const char *part = argc > 2 ? argv[2].str : "mmc0p15";
+  const char *efi = argc > 3 ? argv[3].str : "/android_esp/SnpServerTest.efi";
+  char script[256];
+  snprintf(script, sizeof(script),
+           "gpt %s\n"
+           "mount %s /android_esp fat\n"
+           "uefi_load %s\n",
+           dev, part, efi);
+  return console_run_script_locked(NULL, script);
+}
+
 int cmd_uefi_set_variable(int argc, const console_cmd_args *argv) {
   if (argc != 3) {
     printf("Usage: %s <variable> <data>\n", argv[0].str);
@@ -276,6 +290,7 @@ int cmd_uefi_list_variable(int argc, const console_cmd_args *argv) {
 
 STATIC_COMMAND_START
 STATIC_COMMAND("uefi_load", "load UEFI application and run it", &cmd_uefi_load)
+STATIC_COMMAND("snp_server", "SnpServerTest.efi", &cmd_uefi_snp_server)
 STATIC_COMMAND("uefi_set_var", "set UEFI variable", &cmd_uefi_set_variable)
 STATIC_COMMAND("uefi_list_var", "list UEFI variable", &cmd_uefi_list_variable)
 STATIC_COMMAND_END(uefi);

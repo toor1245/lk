@@ -12,6 +12,7 @@ MODULE_INCLUDES += \
 MODULE_DEPS += \
 	lib/libcpp \
 	lib/cbuf \
+	lib/minip \
 
 MODULE_SRCS += \
 	$(LOCAL_DIR)/uefi.cpp \
@@ -32,5 +33,6 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/variable_mem.cpp \
 	$(LOCAL_DIR)/unicode_collation.cpp \
 	$(LOCAL_DIR)/dt_fixup_protocol.cpp \
+	$(LOCAL_DIR)/network_protocol.cpp \
 
 include make/module.mk

@@ -42,6 +42,7 @@
 #include "log.h"
 #include "guid.h"
 #include "text_protocol.h"
+#include "network_protocol.h"
 #include "efi_internal.h"
 
 namespace {
@@ -335,6 +336,12 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
     return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_TEXT_INPUT_PROTOCOL_GUID)) {
     *intf = open_text_input_protocol();
+    if (*intf == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
+  } else if (guid_eq(protocol, EFI_SIMPLE_NETWORK_PROTOCOL_GUID)) {
+    *intf = open_simple_network_protocol();
     if (*intf == nullptr) {
       return EFI_STATUS_OUT_OF_RESOURCES;
     }

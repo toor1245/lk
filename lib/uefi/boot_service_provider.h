@@ -157,6 +157,12 @@ static constexpr auto EFI_LOADED_IMAGE_PROTOCOL_GUID =
             0x11d2,
             {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}};
 
+static constexpr auto EFI_SIMPLE_NETWORK_PROTOCOL_GUID =
+    EfiGuid{0xA19832B9,
+            0xAC25,
+            0x11D3,
+            {0x9A, 0x2D, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d}};
+
 // This function would be called from GBL before jumping into android kernel
 // LK provides a default no-op implementation that is weakly linked,
 // different platforms can override with their own implementation.
