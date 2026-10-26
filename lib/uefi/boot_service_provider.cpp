@@ -317,19 +317,18 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
     *intf = reinterpret_cast<void *>(config);
     return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_TIMESTAMP_PROTOCOL_GUID)) {
-    EfiTimestampProtocol *ts = reinterpret_cast<EfiTimestampProtocol *>(
-        uefi_malloc(sizeof(EfiTimestampProtocol)));
-    if (ts == nullptr) {
-      return EFI_STATUS_OUT_OF_RESOURCES;
-    }
-    ts->get_timestamp = get_timestamp;
-    ts->get_properties = get_timestamp_properties;
-    *intf = reinterpret_cast<void *>(ts);
+    *intf = open_efi_timestamp_protocol();
     return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_ERASE_BLOCK_PROTOCOL_GUID)) {
     return open_efi_erase_block_protocol(handle, intf);
   } else if (guid_eq(protocol, EFI_BOOT_MEMORY_PROTOCOL_GUID)) {
     *intf = open_boot_memory_protocol();
+    if (*intf == nullptr) {
+      return EFI_STATUS_OUT_OF_RESOURCES;
+    }
+    return EFI_STATUS_SUCCESS;
+  } else if (guid_eq(protocol, EFI_RNG_PROTOCOL_GUID)) {
+    *intf = open_efi_rng_protocol();
     if (*intf == nullptr) {
       return EFI_STATUS_OUT_OF_RESOURCES;
     }

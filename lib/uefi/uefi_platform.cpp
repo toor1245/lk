@@ -28,6 +28,7 @@
 #include <uefi/protocols/erase_block_protocol.h>
 #include <uefi/protocols/gbl_efi_image_loading_protocol.h>
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
+#include <uefi/protocols/random_number_generator_protocol.h>
 #include <uefi/types.h>
 
 #include "defer.h"
@@ -221,4 +222,37 @@ __WEAK EfiStatus open_efi_erase_block_protocol(EfiHandle handle, const void** in
   };
   *intf = p;
   return EFI_STATUS_SUCCESS;
+}
+
+EfiStatus rng_get_info(EfiRngProtocol* self, size_t* rng_algorithm_list_size,
+                       EfiRngAlgorithm* rng_algorithm_list) {
+  if (rng_algorithm_list_size == nullptr) {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+  *rng_algorithm_list_size = 0;
+  return EFI_STATUS_UNSUPPORTED;
+}
+
+EfiStatus rng_get_rng(EfiRngProtocol* self, const EfiRngAlgorithm* rng_algorithm,
+                      size_t rng_value_length, uint8_t* rng_value) {
+  if (rng_value == nullptr) {
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+  return EFI_STATUS_UNSUPPORTED;
+}
+
+__WEAK EfiRngProtocol* open_efi_rng_protocol() {
+  static EfiRngProtocol protocol = {
+      .get_info = rng_get_info,
+      .get_rng = rng_get_rng,
+  };
+  return &protocol;
+}
+
+__WEAK EfiTimestampProtocol* open_efi_timestamp_protocol() {
+  static EfiTimestampProtocol protocol = {
+      .get_timestamp = get_timestamp,
+      .get_properties = get_timestamp_properties,
+  };
+  return &protocol;
 }

@@ -219,6 +219,8 @@ EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
     open_boot_memory_protocol(),
     &EFI_DT_FIXUP_PROTOCOL_GUID,
     &dtFixupProtocol,
+    &EFI_RNG_PROTOCOL_GUID,
+    open_efi_rng_protocol(),
     &EFI_TEXT_INPUT_PROTOCOL_GUID,
     setup_text_input_protocol(),
     &EFI_SIMPLE_NETWORK_PROTOCOL_GUID,

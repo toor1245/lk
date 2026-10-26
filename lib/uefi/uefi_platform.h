@@ -22,6 +22,7 @@
 #include <uefi/protocols/gbl_efi_boot_memory_protocol.h>
 #include <uefi/protocols/gbl_efi_image_loading_protocol.h>
 #include <uefi/protocols/gbl_efi_os_configuration_protocol.h>
+#include <uefi/protocols/random_number_generator_protocol.h>
 #include <uefi/protocols/timestamp.h>
 #include <uefi/system_table.h>
 #include <uefi/types.h>
@@ -86,5 +87,9 @@ void reset_heap();
 EfiStatus open_efi_erase_block_protocol(EfiHandle handle, const void** intf);
 
 GblEfiBootMemoryProtocol* open_boot_memory_protocol();
+
+EfiRngProtocol* open_efi_rng_protocol();
+
+EfiTimestampProtocol* open_efi_timestamp_protocol();
 
 #endif
