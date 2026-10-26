@@ -46,6 +46,19 @@ static event_t minip_configured_event = EVENT_INITIAL_VALUE(minip_configured_eve
 tx_func_t minip_tx_handler;
 void *minip_tx_arg;
 
+static raw_rx_func_t minip_raw_rx_handler;
+static void *minip_raw_rx_arg;
+
+void minip_set_raw_rx(raw_rx_func_t cb, void *arg) {
+    minip_raw_rx_arg = arg;
+    minip_raw_rx_handler = cb;
+}
+
+status_t minip_tx_raw(pktbuf_t *p) {
+    if (!minip_tx_handler) return ERR_NOT_CONFIGURED;
+    return minip_tx_handler(minip_tx_arg, p);
+}
+
 static void dump_mac_address(const uint8_t *mac);
 static void dump_ipv4_addr(uint32_t addr);
 
@@ -485,6 +498,10 @@ static void dump_eth_packet(const struct eth_hdr *eth) {
 
 void minip_rx_driver_callback(pktbuf_t *p) {
     struct eth_hdr *eth;
+
+    if (minip_raw_rx_handler && minip_raw_rx_handler(minip_raw_rx_arg, p)) {
+        return;
+    }
 
     if ((eth = (void *) pktbuf_consume(p, sizeof(struct eth_hdr))) == NULL) {
         return;

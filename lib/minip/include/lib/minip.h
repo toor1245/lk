@@ -47,6 +47,10 @@ status_t minip_wait_for_configured(lk_time_t timeout);
 /* packet rx hook to hand to ethernet driver */
 void minip_rx_driver_callback(pktbuf_t *p);
 
+typedef bool (*raw_rx_func_t)(void *arg, pktbuf_t *p);
+void minip_set_raw_rx(raw_rx_func_t cb, void *arg);
+status_t minip_tx_raw(pktbuf_t *p);
+
 /* global configuration state */
 void minip_get_macaddr(uint8_t *addr);
 void minip_set_macaddr(const uint8_t *addr);
