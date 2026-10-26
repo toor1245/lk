@@ -35,5 +35,6 @@ MODULE_SRCS += \
 	$(LOCAL_DIR)/unicode_collation.cpp \
 	$(LOCAL_DIR)/dt_fixup_protocol.cpp \
 	$(LOCAL_DIR)/network_protocol.cpp \
+	$(LOCAL_DIR)/gbl_efi_os_configuration_protocol.cpp \
 
 include make/module.mk

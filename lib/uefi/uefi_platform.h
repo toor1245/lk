@@ -40,6 +40,11 @@ EfiStatus fixup_bootconfig(struct GblEfiOsConfigurationProtocol* self,
                            size_t bootconfig_size, const uint8_t* bootconfig,
                            size_t* fixup_buffer_size, uint8_t* fixup);
 
+EfiStatus fixup_kernel_commandline(struct GblEfiOsConfigurationProtocol* self,
+                                   size_t commandline_size,
+                                   const EfiChar8* commandline,
+                                   size_t* fixup_buffer_size, EfiChar8* fixup);
+
 EfiStatus select_device_trees(struct GblEfiOsConfigurationProtocol* self,
                               size_t num_device_trees,
                               GblEfiVerifiedDeviceTree* device_trees);
@@ -89,6 +94,8 @@ EfiStatus open_efi_erase_block_protocol(EfiHandle handle, const void** intf);
 GblEfiBootMemoryProtocol* open_boot_memory_protocol();
 
 EfiRngProtocol* open_efi_rng_protocol();
+
+GblEfiOsConfigurationProtocol* open_gbl_os_configuration_protocol();
 
 EfiTimestampProtocol* open_efi_timestamp_protocol();
 

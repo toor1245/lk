@@ -304,17 +304,7 @@ EfiStatus open_protocol(EfiHandle handle, const EfiGuid *protocol, const void **
     }
     return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_GBL_OS_CONFIGURATION_PROTOCOL_GUID)) {
-    GblEfiOsConfigurationProtocol *config = nullptr;
-    allocate_pool(EFI_MEMORY_TYPE_BOOT_SERVICES_DATA, sizeof(*config),
-                  reinterpret_cast<void **>(&config));
-    if (config == nullptr) {
-      return EFI_STATUS_OUT_OF_RESOURCES;
-    }
-    config->revision = GBL_EFI_OS_CONFIGURATION_PROTOCOL_REVISION;
-    config->fixup_bootconfig = fixup_bootconfig;
-    config->select_device_trees = select_device_trees;
-    config->select_fit_configuration = select_fit_configuration;
-    *intf = reinterpret_cast<void *>(config);
+    *intf = open_gbl_os_configuration_protocol();
     return EFI_STATUS_SUCCESS;
   } else if (guid_eq(protocol, EFI_TIMESTAMP_PROTOCOL_GUID)) {
     *intf = open_efi_timestamp_protocol();

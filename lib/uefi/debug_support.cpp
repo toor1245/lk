@@ -229,6 +229,8 @@ EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
     open_device_path_protocol(),
     &EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID,
     open_device_path_to_text_protocol(),
+    &EFI_GBL_OS_CONFIGURATION_PROTOCOL_GUID,
+    open_gbl_os_configuration_protocol(),
     nullptr
   );
 }
