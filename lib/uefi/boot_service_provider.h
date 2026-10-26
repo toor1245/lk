@@ -39,6 +39,12 @@ static constexpr auto EFI_DEVICE_PATH_PROTOCOL_GUID =
             0x11d2,
             {0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b}};
 
+static constexpr auto EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID =
+    EfiGuid{0x8b843e20,
+            0x8132,
+            0x4852,
+            {0x90, 0xcc, 0x55, 0x1a, 0x4e, 0x4a, 0x7f, 0x1c}};
+
 static constexpr auto EFI_GBL_VENDOR_MEDIA_DEVICE_PATH_GUID =
     EfiGuid{0xa09773e3,
             0xf027,

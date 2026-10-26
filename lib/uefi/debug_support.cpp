@@ -28,6 +28,7 @@
 #include <uefi/types.h>
 
 #include "charset.h"
+#include "device_path_protocol.h"
 #include "uefi_platform.h"
 #include "boot_service_provider.h"
 #include "unicode_collation.h"
@@ -222,6 +223,10 @@ EfiStatus setup_firmware_protocols(EfiSystemTable &table) {
     setup_text_input_protocol(),
     &EFI_SIMPLE_NETWORK_PROTOCOL_GUID,
     open_simple_network_protocol(),
+    &EFI_DEVICE_PATH_PROTOCOL_GUID,
+    open_device_path_protocol(),
+    &EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID,
+    open_device_path_to_text_protocol(),
     nullptr
   );
 }

@@ -19,6 +19,8 @@ static const char *guid_to_string(const EfiGuid *g) {
     return "LOADED_IMAGE_PROTOCOL";
   if (guid_eq(g, EFI_DEVICE_PATH_PROTOCOL_GUID))
     return "EFI_DEVICE_PATH_PROTOCOL";
+  if (guid_eq(g, EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID))
+    return "EFI_DEVICE_PATH_TO_TEXT_PROTOCOL";
   if (guid_eq(g, EFI_BLOCK_IO_PROTOCOL_GUID))
     return "EFI_BLOCK_IO_PROTOCOL";
   if (guid_eq(g, EFI_BLOCK_IO2_PROTOCOL_GUID))
