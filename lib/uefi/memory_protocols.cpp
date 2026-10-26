@@ -135,6 +135,7 @@ __WEAK void *alloc_page(void *addr, size_t size, size_t align_log2) {
   auto aspace = set_boot_aspace();
   size = ROUNDUP(size, PAGE_SIZE);
   struct list_node list;
+  list_initialize(&list);
   size_t allocated =
       pmm_alloc_range(reinterpret_cast<paddr_t>(addr), size, &list);
   if (allocated != size / PAGE_SIZE) {
@@ -203,17 +204,18 @@ __WEAK EfiStatus free_pages(void *memory, size_t pages) {
            "%p\n",
            memory, pa);
   }
+  // pmm_free_kpages() needs the region still mapped.
+  auto pages_freed = pmm_free_kpages(memory, pages);
+  if (pages_freed != pages) {
+    printf("Failed to free physical pages %p %zu, only freed %zu pages\n", pa,
+           pages, pages_freed);
+    return EFI_STATUS_DEVICE_ERROR;
+  }
   status_t err =
       vmm_free_region(set_boot_aspace(), reinterpret_cast<vaddr_t>(memory));
   if (err) {
     printf("%s err:%d memory [%p] pages:%zu\n", __FUNCTION__, err, memory,
            pages);
-    return EFI_STATUS_DEVICE_ERROR;
-  }
-  auto pages_freed = pmm_free_kpages(pa, pages);
-  if (pages_freed != pages) {
-    printf("Failed to free physical pages %p %zu, only freed %zu pages\n", pa,
-           pages, pages_freed);
     return EFI_STATUS_DEVICE_ERROR;
   }
   return EFI_STATUS_SUCCESS;
