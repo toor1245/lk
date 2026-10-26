@@ -94,3 +94,5 @@ status_t rpmb_route_frames(struct rpmb_dev *dev, const uint8_t *req,
                            uint32_t req_len, uint8_t *resp, uint32_t resp_len);
 
 void rpmb_dump_frames(const char *label, const void *frames, uint32_t len);
+void rpmb_trace_exchange(const void *req, uint32_t req_len,
+                         const void *resp, uint32_t resp_len, status_t err);
