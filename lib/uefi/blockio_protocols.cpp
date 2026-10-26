@@ -60,7 +60,24 @@ EfiStatus read_blocks(EfiBlockIoProtocol *self, uint32_t media_id, uint64_t lba,
 
 EfiStatus write_blocks(EfiBlockIoProtocol *self, uint32_t media_id,
                        uint64_t lba, size_t buffer_size, void *buffer) {
-  printf("%s is called\n", __FUNCTION__);
+  auto interface = reinterpret_cast<EfiBlockIoInterface *>(self);
+  auto dev = reinterpret_cast<bdev_t *>(interface->dev);
+  if (lba >= dev->block_count) {
+    printf("OOB write %s %llu %u\n", dev->name, lba, dev->block_count);
+    return EFI_STATUS_END_OF_MEDIA;
+  }
+  if (interface->io_stack == nullptr) {
+    printf("No IO stack allocted.\n");
+    return EFI_STATUS_OUT_OF_RESOURCES;
+  }
+
+  const size_t bytes_written =
+      call_with_stack(interface->io_stack, bio_write_block, dev, buffer, lba,
+                      buffer_size / dev->block_size);
+  if (bytes_written != buffer_size) {
+    printf("Failed to write %ld bytes to %s\n", buffer_size, dev->name);
+    return EFI_STATUS_DEVICE_ERROR;
+  }
   return EFI_STATUS_SUCCESS;
 }
 

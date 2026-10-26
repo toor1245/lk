@@ -24,6 +24,7 @@
 #include <lk/trace.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <uefi/protocols/block_io2_protocol.h>
 #include <uefi/types.h>
 
@@ -48,13 +49,13 @@ EfiStatus reset(EfiBlockIo2Protocol* self, bool extended_verification) {
   return EFI_STATUS_UNSUPPORTED;
 }
 
-void async_read_callback(void* cookie, struct bdev* dev, ssize_t bytes_read) {
+void async_io_callback(void* cookie, struct bdev* dev, ssize_t transferred) {
   // |cookie| might be identity mapped memory, which is in UEFI address space.
   // We need to switch to the UEFI address space to access it.
   auto aspace = set_boot_aspace();
   auto old_aspace = vmm_set_active_aspace(aspace);
   auto token = reinterpret_cast<EfiBlockIo2Token*>(cookie);
-  if (bytes_read < 0) {
+  if (transferred < 0) {
     token->transaction_status = EFI_STATUS_DEVICE_ERROR;
   } else {
     token->transaction_status = EFI_STATUS_SUCCESS;
@@ -77,7 +78,7 @@ EfiStatus read_blocks_async(bdev_t* dev, uint64_t lba, EfiBlockIo2Token* token,
   }
   if (dev->read_async != nullptr) {
     bio_read_async(dev, buffer, lba * dev->block_size, buffer_size,
-                   async_read_callback, token);
+                   async_io_callback, token);
     return EFI_STATUS_SUCCESS;
   }
   // First draft of this API will just use a background thread.
@@ -90,7 +91,7 @@ EfiStatus read_blocks_async(bdev_t* dev, uint64_t lba, EfiBlockIo2Token* token,
         vmm_set_active_aspace(aspace);
         auto bytes_read =
             bio_read_block(dev, buffer, lba, buffer_size / dev->block_size);
-        async_read_callback(token, dev, bytes_read);
+        async_io_callback(token, dev, bytes_read);
         return 0;
       },
       get_current_thread()->priority, kIoStackSize);
@@ -118,16 +119,61 @@ EfiStatus read_blocks_trampoline(EfiBlockIo2Protocol* self, uint32_t media_id,
   return static_cast<EfiStatus>(ret);
 }
 
-EfiStatus write_blocks_ex(EfiBlockIo2Protocol* self, uint32_t media_id,
-                          uint64_t lba, EfiBlockIo2Token* token,
-                          size_t buffer_size, const void* buffer) {
-  printf(
-      "Writing blocks from UEFI app is currently not supported to protect the "
-      "device.\n");
-  return EFI_STATUS_UNSUPPORTED;
+EfiStatus write_blocks_async(bdev_t* dev, uint64_t lba, EfiBlockIo2Token* token,
+                             size_t buffer_size, void* buffer) {
+  if (lba >= dev->block_count) {
+    printf("OOB async write %s %llu %u\n", dev->name, lba, dev->block_count);
+    return EFI_STATUS_END_OF_MEDIA;
+  }
+  if (token == nullptr) {
+    printf("Invalid token %p\n", token);
+    return EFI_STATUS_INVALID_PARAMETER;
+  }
+  if (dev->write_async != nullptr) {
+    bio_write_async(dev, buffer, lba * dev->block_size, buffer_size,
+                    async_io_callback, token);
+    return EFI_STATUS_SUCCESS;
+  }
+  auto thread = thread_create_functor(
+      "async_bio",
+      [dev, lba, buffer_size, buffer, token]() {
+        auto aspace = set_boot_aspace();
+        vmm_set_active_aspace(aspace);
+        auto bytes_written = bio_write_block(
+            dev, static_cast<const void*>(buffer), lba, buffer_size / dev->block_size);
+        async_io_callback(token, dev, bytes_written);
+        return 0;
+      },
+      get_current_thread()->priority, kIoStackSize);
+  if (thread == nullptr) {
+    printf("Failed to create thread for IO write\n");
+    return EFI_STATUS_DEVICE_ERROR;
+  }
+
+  auto err = thread_detach_and_resume(thread);
+  if (err != NO_ERROR) {
+    printf("Failed to resume thread for IO write %d\n", err);
+    return EFI_STATUS_DEVICE_ERROR;
+  }
+  return EFI_STATUS_SUCCESS;
+}
+
+EfiStatus write_blocks_trampoline(EfiBlockIo2Protocol* self, uint32_t media_id,
+                                  uint64_t lba, EfiBlockIo2Token* token,
+                                  size_t buffer_size, const void* buffer) {
+  auto interface = reinterpret_cast<EfiBlockIo2Interface*>(self);
+  auto dev = reinterpret_cast<bdev_t*>(interface->dev);
+  void* io_stack = reinterpret_cast<char*>(get_io_stack()) + kIoStackSize;
+  auto ret = call_with_stack(io_stack, write_blocks_async, dev, lba, token,
+                             buffer_size, const_cast<void*>(buffer));
+  return static_cast<EfiStatus>(ret);
 }
 
 EfiStatus flush_blocks_ex(EfiBlockIo2Protocol* self, EfiBlockIo2Token* token) {
+  if (token != nullptr && token->event != nullptr) {
+    token->transaction_status = EFI_STATUS_SUCCESS;
+    signal_event(token->event);
+  }
   return EFI_STATUS_SUCCESS;
 }
 
@@ -138,12 +184,16 @@ __WEAK EfiStatus open_async_block_device(EfiHandle handle, const void** intf) {
   printf("%s(%s)\n", __FUNCTION__, dev->name);
   auto interface = reinterpret_cast<EfiBlockIo2Interface*>(
       uefi_malloc(sizeof(EfiBlockIo2Interface)));
+  if (interface == nullptr) {
+    return EFI_STATUS_OUT_OF_RESOURCES;
+  }
+  memset(interface, 0, sizeof(EfiBlockIo2Interface));
   auto protocol = &interface->protocol;
   auto media = &interface->media;
   protocol->media = media;
   protocol->reset = reset;
   protocol->read_blocks_ex = read_blocks_trampoline;
-  protocol->write_blocks_ex = write_blocks_ex;
+  protocol->write_blocks_ex = write_blocks_trampoline;
   protocol->flush_blocks_ex = flush_blocks_ex;
   media->block_size = dev->block_size;
   media->io_align = media->block_size;
